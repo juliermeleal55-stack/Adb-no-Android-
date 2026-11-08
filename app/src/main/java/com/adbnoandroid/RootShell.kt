@@ -224,12 +224,15 @@ private class ShLogSession(
     private var process: Process? = null
 
     init {
-        val p = try {
-            ProcessBuilder("sh", "-c", command).redirectErrorStream(true).start()
+        try {
+            startLogcat()
         } catch (e: Exception) {
             callbacks.onDone("Erro ao iniciar o logcat: ${e.message}")
-            return
         }
+    }
+
+    private fun startLogcat() {
+        val p = ProcessBuilder("sh", "-c", command).redirectErrorStream(true).start()
         process = p
         startReader(p)
     }
@@ -285,12 +288,15 @@ private class SuLogSession(
     private var stdin: java.io.OutputStream? = null
 
     init {
-        val p = try {
-            ProcessBuilder("su").redirectErrorStream(true).start()
+        try {
+            startSu()
         } catch (e: Exception) {
             callbacks.onDone("Erro ao iniciar o su: ${e.message}")
-            return
         }
+    }
+
+    private fun startSu() {
+        val p = ProcessBuilder("su").redirectErrorStream(true).start()
         process = p
         val out = p.outputStream
         stdin = out
@@ -343,7 +349,7 @@ private class SuLogSession(
     override fun stop() {
         stopped = true
         try {
-            stdin?.write("kill $LOGPID\nexit\n".toByteArray(Charsets.UTF_8))
+            stdin?.write("kill \$LOGPID\nexit\n".toByteArray(Charsets.UTF_8))
             stdin?.flush()
         } catch (_: Exception) {
         }

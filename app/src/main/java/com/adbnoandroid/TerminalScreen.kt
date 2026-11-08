@@ -22,10 +22,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.LocalClipboard
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -39,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -88,6 +90,7 @@ data class ConsoleEntry(
 /** Tamanho máximo do buffer de logcat na tela (caracteres). */
 private const val LOG_MAX_CHARS = 250_000
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TerminalScreen() {
     val context = LocalContext.current
@@ -112,7 +115,7 @@ fun TerminalScreen() {
 
     val scope = rememberCoroutineScope()
     val inputFocus = remember { FocusRequester() }
-    val clipboard = LocalClipboard.current
+    val clipboard = LocalClipboardManager.current
 
     // Carrega a lista de dispositivos remotos
     LaunchedEffect(Unit) {
@@ -351,7 +354,7 @@ fun TerminalScreen() {
             }
             sb.append("\n")
         }
-        clipboard.setText(AnnotatedString(sb.toString().trimEnd()))
+        clipboard.copy(AnnotatedString(sb.toString().trimEnd()))
     }
 
     Scaffold(

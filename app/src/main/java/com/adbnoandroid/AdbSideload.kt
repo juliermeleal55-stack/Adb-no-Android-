@@ -67,7 +67,7 @@ object AdbSideload {
             val size = file.length()
             connection.writeServiceData(
                 remoteId,
-                "BEGIN:100644${String.format("%08x", size)}\0".toByteArray(Charsets.US_ASCII)
+                "BEGIN:100644${String.format("%08x", size)}\u0000".toByteArray(Charsets.US_ASCII)
             )
             expectTextFrame(reader, "OKAY", "iniciar o sideload")
 
@@ -81,7 +81,7 @@ object AdbSideload {
                     if (n > 0) {
                         connection.writeServiceData(remoteId, buffer.copyOf(n))
                         for (i in 0 until n) {
-                            checksum = (checksum + (buffer[i].toInt() and 0xFF)) and 0xFFFFFFFF
+                            checksum = checksum + (buffer[i].toInt() and 0xFF)
                         }
                         // O recovery responde DATA:<novo offset> a cada bloco
                         val frame = reader.readFrame()
@@ -98,7 +98,7 @@ object AdbSideload {
 
             connection.writeServiceData(
                 remoteId,
-                "DONE:${String.format("%08x", checksum)}\0".toByteArray(Charsets.US_ASCII)
+                "DONE:${String.format("%08x", (checksum.toLong() and 0xFFFFFFFFL))}\u0000".toByteArray(Charsets.US_ASCII)
             )
             expectTextFrame(reader, "OKAY", "finalizar o sideload")
             onProgress(size, size)

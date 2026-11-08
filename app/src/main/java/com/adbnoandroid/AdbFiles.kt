@@ -22,7 +22,7 @@ import java.nio.ByteOrder
 object AdbFiles {
 
     private const val CHUNK = 4096
-    private const val MODE_FILE_644 = 0100644 // 33188 em decimal (arquivo 644)
+    private const val MODE_FILE_644 = 33188 // = 0100644 em octal (arquivo 644)
 
     // ===================== USB (cabo/OTG) =====================
 
@@ -120,6 +120,8 @@ object AdbFiles {
                         throw AdbServiceException("Não deu para ler $remotePath (${reply.message}).")
                     is SyncReply.Other ->
                         throw AdbServiceException("Resposta inesperada no STAT: ${reply.command}.")
+                    else ->
+                        throw AdbServiceException("Resposta inesperada no STAT (${reply.command}).")
                 }
             } catch (e: AdbServiceException) {
                 throw e
@@ -142,6 +144,8 @@ object AdbFiles {
                         is SyncReply.Fail ->
                             throw AdbServiceException("Falha ao baixar: ${reply.message}")
                         is SyncReply.Okay -> continue
+                        is SyncReply.Stats ->
+                            throw AdbServiceException("Resposta inesperada no download (STAT).")
                         is SyncReply.Other ->
                             throw AdbServiceException(
                                 "Resposta inesperada no download: ${reply.command}."
@@ -196,7 +200,7 @@ object AdbFiles {
                 }
             }
             // DONE não tem payload: o campo de 4 bytes carrega o mtime.
-            reader.sendCommandWithValue("DONE", (System.currentTimeMillis() / 1000).toInt())
+            reader.sendCommand("DONE", (System.currentTimeMillis() / 1000).toInt())
             when (val reply = reader.readPacket()) {
                 is SyncReply.Okay -> {}
                 is SyncReply.Fail ->
@@ -217,11 +221,12 @@ object AdbFiles {
 
 /** Resposta file-sync (protocolo novo: 4 bytes ASCII + tamanho + payload). */
 sealed class SyncReply {
-    class Okay : SyncReply()
-    class Fail(val message: String) : SyncReply()
-    class Data(val data: ByteArray) : SyncReply()
-    class Done : SyncReply()
-    class Stats(val mode: Long, val size: Long, val mtime: Long) : SyncReply()
+    abstract val command: String
+    class Okay : SyncReply() { override val command = "OKAY" }
+    class Fail(val message: String) : SyncReply() { override val command = "FAIL" }
+    class Data(val data: ByteArray) : SyncReply() { override val command = "DATA" }
+    class Done : SyncReply() { override val command = "DONE" }
+    class Stats(val mode: Long, val size: Long, val mtime: Long) : SyncReply() { override val command = "STAT" }
     class Other(val command: String) : SyncReply()
 }
 
@@ -303,7 +308,7 @@ internal class SyncReader(
             }
             val next = connection.readServicePayload(remoteId)
                 ?: throw AdbServiceException("O serviço sync foi fechado pelo aparelho.")
-            for (b in next) buf.add(b.toInt())
+            for (b in next) buf.add(b)
         }
     }
 
@@ -366,7 +371,7 @@ internal class SyncTextReader(
             }
             val next = connection.readServicePayload(remoteId)
                 ?: throw AdbServiceException("O serviço foi fechado pelo aparelho.")
-            for (b in next) buf.add(b.toInt())
+            for (b in next) buf.add(b)
         }
     }
 }

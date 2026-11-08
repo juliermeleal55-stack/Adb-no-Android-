@@ -164,7 +164,7 @@ object AdbClient {
         fun start() {
             val thread = Thread {
                 var conn: AdbConnection? = null
-                @Volatile var done = false
+                var done = false
                 fun finish(msg: String?) {
                     if (!done) {
                         done = true

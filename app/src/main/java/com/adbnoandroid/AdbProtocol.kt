@@ -212,7 +212,7 @@ class AdbConnection(
 
     private fun connectInner(): String {
         // Banner do host (o adbd só exige o prefixo "host:").
-        send(Adb.CNXN, Adb.VERSION, Adb.MAX_DATA, "host::adb_no_android\0".toByteArray(Charsets.UTF_8))
+        send(Adb.CNXN, Adb.VERSION, Adb.MAX_DATA, "host::adb_no_android\u0000".toByteArray(Charsets.UTF_8))
         var packet = readPacket()
         if (packet.command == Adb.CNXN) return finish(stripNul(packet))
 
@@ -246,7 +246,7 @@ class AdbConnection(
             }
             // O aparelho rejeitou a chave: envia a chave pública e espera o
             // usuário tocar "Permitir" no diálogo do aparelho.
-            send(Adb.AUTH, Adb.AUTH_RSAPUBLICKEY, 0, (auth.publicKeyPem() + "\0").toByteArray(Charsets.UTF_8))
+            send(Adb.AUTH, Adb.AUTH_RSAPUBLICKEY, 0, (auth.publicKeyPem() + "\u0000").toByteArray(Charsets.UTF_8))
             transport.setTimeout(120_000)
             packet = readPacket()
             transport.setTimeout(30_000)
@@ -261,7 +261,7 @@ class AdbConnection(
 
     /** Abre um serviço (ex.: "shell:comando"). Retorna o id remoto da conexão. */
     fun openService(destination: String): Int {
-        send(Adb.OPEN, LOCAL_ID, 0, (destination + "\0").toByteArray(Charsets.UTF_8))
+        send(Adb.OPEN, LOCAL_ID, 0, (destination + "\u0000").toByteArray(Charsets.UTF_8))
         val packet = readPacket()
         if (packet.command == Adb.CLSE) {
             throw AdbServiceException(
@@ -387,7 +387,7 @@ class AdbConnection(
 
     // ---------------- pacotes ----------------
 
-    private fun send(command: Int, arg0: Int, arg1: Int, data: ByteArray) {
+    private fun send(command: Int, arg0: Int, arg1: Int, data: ByteArray = ByteArray(0)) {
         val header = ByteBuffer.allocate(24).order(ByteOrder.LITTLE_ENDIAN)
         header.putInt(command)
         header.putInt(arg0)
@@ -414,6 +414,7 @@ class AdbConnection(
         if (dataLength < 0 || dataLength > Adb.MAX_DATA) {
             throw AdbServiceException("Pacote com tamanho inválido: $dataLength")
         }
+        val data = if (dataLength > 0) transport.readFull(dataLength) else ByteArray(0)
         if (command == Adb.FAIL) {
             val detail = if (data.isNotEmpty()) String(data, Charsets.UTF_8).trim() else ""
             throw AdbServiceException(
@@ -421,7 +422,6 @@ class AdbConnection(
                     if (detail.isNotEmpty()) ": $detail" else "."
             )
         }
-        val data = if (dataLength > 0) transport.readFull(dataLength) else ByteArray(0)
         if (dataLength > 0 && Adb.checksum(data) != dataChecksum) {
             throw AdbServiceException("Checksum inválido no pacote ${Adb.nameOf(command)}.")
         }

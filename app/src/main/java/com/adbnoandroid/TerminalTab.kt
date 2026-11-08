@@ -52,7 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
@@ -425,7 +425,7 @@ private fun CommandRow(
 @Composable
 private fun ConsoleEntryView(entry: ConsoleEntry) {
     val context = LocalContext.current
-    val clipboard = LocalClipboard.current
+    val clipboard = LocalClipboardManager.current
     var clipOpen by remember { mutableStateOf(false) }
     var savedMsg by remember { mutableStateOf<String?>(null) }
     Column {
@@ -470,7 +470,7 @@ private fun ConsoleEntryView(entry: ConsoleEntry) {
                 }
                 TextButton(
                     onClick = {
-                        clipboard.setText(AnnotatedString(r.output))
+                        clipboard.copy(AnnotatedString(r.output))
                         savedMsg = "Copiado para a área de transferência."
                     },
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
@@ -558,7 +558,7 @@ private fun LogClipDialog(
     initialText: String,
     onDismiss: () -> Unit
 ) {
-    val clipboard = LocalClipboard.current
+    val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     var text by remember { mutableStateOf(initialText) }
     var selStart by remember { mutableStateOf(0) }
@@ -629,7 +629,7 @@ private fun LogClipDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    clipboard.setText(AnnotatedString(effective))
+                    clipboard.copy(AnnotatedString(effective))
                     onDismiss()
                 }
             ) {
@@ -655,7 +655,7 @@ private fun LogClipDialog(
 }
 
 @Composable
-private fun RootBadge(state: RootState, onClick: () -> Unit) {
+fun RootBadge(state: RootState, onClick: () -> Unit) {
     val (label, color) = when (state) {
         RootState.CHECKING -> "VERIFICANDO…" to TerminalAmber
         RootState.GRANTED -> "ROOT ✓" to TerminalGreen
