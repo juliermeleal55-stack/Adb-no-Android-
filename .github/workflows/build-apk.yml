@@ -47,9 +47,5 @@ jobs:
           TAG="v1.0"
           # Re-execução: remove o release anterior para o upload não falhar
           gh release delete "$TAG" --yes --cleanup-tag 2> /dev/null || true
-          gh release create "$TAG" \
-            app/build/outputs/apk/debug/app-debug.apk \
-            --title "ADB no Android $TAG" \
-            --notes "APK de teste (debug) gerado automaticamente no GitHub Actions.
-    Instale no celular (permita apps de fontes desconhecidas) e teste.
-    O app: terminal ADB com root, USB/OTG, Wi-Fi, logcat ao vivo, pull/push e sideload."
+          NOTES="APK de teste (debug) gerado automaticamente no GitHub Actions. Instale no celular (permita apps de fontes desconhecidas) e teste. O app: terminal ADB com root, USB/OTG, Wi-Fi, logcat ao vivo, pull/push e sideload."
+          gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk --title "ADB no Android $TAG" --notes "$NOTES"
