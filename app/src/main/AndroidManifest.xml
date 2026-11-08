@@ -37,6 +37,17 @@
                 <action android:name="com.adbnoandroid.USB_PERMISSION" />
             </intent-filter>
         </receiver>
+
+        <!-- Compartilhamento de logs/arquivos (WhatsApp, e-mail…) -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.adbnoandroid.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

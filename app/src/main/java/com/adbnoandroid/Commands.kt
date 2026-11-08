@@ -12,7 +12,7 @@ data class CommandPreset(
 object Commands {
 
     val categories = listOf(
-        "Todos", "Dispositivo", "Apps", "Sistema", "Rede", "Arquivos", "Ações"
+        "Todos", "Dispositivo", "Apps", "Logs", "Sistema", "Rede", "Arquivos", "Ações"
     )
 
     val all: List<CommandPreset> = listOf(
@@ -58,6 +58,28 @@ object Commands {
             "am force-stop <pacote>",
             "Apps",
             ready = false
+        ),
+
+        // ---------- Logs (coleta igual ao PC) ----------
+        CommandPreset("Logcat — tudo (dump)", "logcat -d -b all", "Logs"),
+        CommandPreset("Logcat — só erros", "logcat -d -b all *:E", "Logs"),
+        CommandPreset("Últimas 500 linhas do log", "logcat -d -b all -t 500", "Logs"),
+        CommandPreset("Limpar o logcat", "logcat -c -b all", "Logs"),
+        CommandPreset(
+            "Log de um app (por PID)",
+            "logcat -d -b all --pid $(pidof <pacote>)",
+            "Logs",
+            ready = false
+        ),
+        CommandPreset(
+            "Gerar bugreport (zip, demora)",
+            "bugreport /sdcard/bugreport.zip",
+            "Logs"
+        ),
+        CommandPreset(
+            "Gerar dumpstate (txt, demora)",
+            "dumpstate -o /sdcard/dumpstate.txt",
+            "Logs"
         ),
 
         // ---------- Sistema ----------

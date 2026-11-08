@@ -34,6 +34,7 @@ object Adb {
     const val OKAY = 0x59414B4F.toInt() // "OKAY"
     const val CLSE = 0x45534C43.toInt() // "CLSE"
     const val WRTE = 0x45545257.toInt() // "WRTE"
+    const val FAIL = 0x4C494146.toInt() // "FAIL"
 
     // arg0 do AUTH
     const val AUTH_TOKEN = 1
@@ -61,6 +62,7 @@ object Adb {
         OKAY -> "OKAY"
         CLSE -> "CLSE"
         WRTE -> "WRTE"
+        FAIL -> "FAIL"
         else -> String(
             ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
                 .putInt(command).array()
@@ -193,8 +195,22 @@ class AdbConnection(
     var banner: String? = null
         private set
 
-    /** Troca o banner (CNXN) e autentica se o aparelho pedir. Devolve o banner. */
+    @Volatile
+    private var connected = false
+
+    /**
+     * Troca o banner (CNXN) e autentica se o aparelho pedir. Devolve o banner.
+     * **Idempotente**: conexões USB já chegam conectadas (AdbUsb.open), e
+     * chamar de novo seria enviar um segundo CNXN ao adbd.
+     */
     fun connect(): String {
+        if (connected) return banner ?: ""
+        val result = connectInner()
+        connected = true
+        return result
+    }
+
+    private fun connectInner(): String {
         // Banner do host (o adbd só exige o prefixo "host:").
         send(Adb.CNXN, Adb.VERSION, Adb.MAX_DATA, "host::adb_no_android\0".toByteArray(Charsets.UTF_8))
         var packet = readPacket()
@@ -283,6 +299,55 @@ class AdbConnection(
         send(Adb.CLSE, LOCAL_ID, remoteId)
     }
 
+    /**
+     * Envia [data] num serviço já aberto (ex.: "sync:", "sideload:") em blocos
+     * de 4096 bytes. Cada bloco vai num pacote WRTE e espera o ack OKAY do
+     * aparelho — exatamente o que o `adb` do PC faz no file-sync protocol.
+     */
+    fun writeServiceData(remoteId: Int, data: ByteArray) {
+        var off = 0
+        while (off < data.size) {
+            val n = minOf(Adb.MAX_DATA, data.size - off)
+            send(Adb.WRTE, LOCAL_ID, remoteId, data.copyOfRange(off, off + n))
+            val packet = readPacket()
+            if (packet.command != Adb.OKAY || packet.arg0 != LOCAL_ID || packet.arg1 != remoteId) {
+                throw AdbServiceException(
+                    "Resposta inesperada ao enviar dados (${packet.name})."
+                )
+            }
+            off += n
+        }
+    }
+
+    /**
+     * Lê o próximo bloco de dados do serviço (ackeando o WRTE).
+     * Devolve **null** quando o aparelho fecha o serviço (CLSE).
+     */
+    fun readServicePayload(remoteId: Int): ByteArray? {
+        val packet = readPacket()
+        return when (packet.command) {
+            Adb.WRTE -> {
+                if (packet.arg0 != remoteId || packet.arg1 != LOCAL_ID) {
+                    throw AdbServiceException(
+                        "WRTE de serviço inesperado (arg0=${packet.arg0}, arg1=${packet.arg1})."
+                    )
+                }
+                send(Adb.OKAY, LOCAL_ID, remoteId) // ack do WRTE
+                packet.data
+            }
+            Adb.CLSE -> {
+                if (packet.arg0 != remoteId) {
+                    throw AdbServiceException("CLSE de serviço inesperado (arg0=${packet.arg0}).")
+                }
+                closeService(remoteId)
+                null
+            }
+            else -> throw AdbServiceException(
+                "Pacote inesperado na leitura do serviço (${packet.name})."
+            )
+        }
+    }
+
     // ---------------- I/O cru (protocolo file-sync: sideload) ----------------
 
     fun writeRaw(data: ByteArray) {
@@ -348,6 +413,13 @@ class AdbConnection(
         }
         if (dataLength < 0 || dataLength > Adb.MAX_DATA) {
             throw AdbServiceException("Pacote com tamanho inválido: $dataLength")
+        }
+        if (command == Adb.FAIL) {
+            val detail = if (data.isNotEmpty()) String(data, Charsets.UTF_8).trim() else ""
+            throw AdbServiceException(
+                "O aparelho respondeu FAIL ao comando ${Adb.nameOf(arg0)}" +
+                    if (detail.isNotEmpty()) ": $detail" else "."
+            )
         }
         val data = if (dataLength > 0) transport.readFull(dataLength) else ByteArray(0)
         if (dataLength > 0 && Adb.checksum(data) != dataChecksum) {

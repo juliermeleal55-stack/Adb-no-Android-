@@ -1,5 +1,6 @@
 package com.adbnoandroid
 
+import java.io.File
 import java.io.IOException
 import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
@@ -26,7 +27,7 @@ data class ShellResult(
  */
 object RootShell {
 
-    private const val TIMEOUT_SECONDS = 90L
+    private const val TIMEOUT_SECONDS = 180L
 
     @Volatile
     var rootAvailable: Boolean? = null
@@ -70,6 +71,61 @@ object RootShell {
             failed = true,
             timedOut = false
         )
+    }
+
+    /**
+     * Logcat ao vivo **no próprio aparelho** (alvo local) — igual ao
+     * `adb logcat` do PC, mas sem outro aparelho.
+     *
+     * - Com root: roda dentro de uma sessão `su` (o logcat fica em background
+     *   na sessão e é matado limpo ao parar — sem processo órfão).
+     * - Sem root: roda via `sh` — o Android limita a mostrar só os logs deste
+     *   app (limitação do sistema, sem solução sem root).
+     */
+    fun startLogcatLocal(command: String, callbacks: LogcatCallbacks): LogSession {
+        return if (rootAvailable == true) SuLogSession(command, callbacks)
+        else ShLogSession(command, callbacks)
+    }
+
+    /**
+     * Lê um arquivo deste aparelho em modo binário (para o "baixar arquivo"
+     * com alvo local). Com root, usa `cat` via `su`; sem root, só funciona
+     * em caminhos que o próprio app pode acessar.
+     */
+    fun readBytesLocal(path: String): ByteArray {
+        if (rootAvailable == true) {
+            val process = try {
+                ProcessBuilder("su").start()
+            } catch (e: IOException) {
+                throw AdbException("Não foi possível iniciar o su: ${e.message}")
+            }
+            try {
+                process.outputStream.use { os ->
+                    os.write("cat \"$path\"\nexit\n".toByteArray(Charsets.UTF_8))
+                    os.flush()
+                }
+                val bytes = process.inputStream.readBytes()
+                if (!process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                    process.destroyForcibly()
+                }
+                return bytes
+            } catch (e: Exception) {
+                throw AdbException("Falha ao ler $path: ${e.message}")
+            } finally {
+                try {
+                    process.destroy()
+                } catch (_: Exception) {
+                }
+            }
+        }
+        val file = File(path)
+        if (!file.canRead()) {
+            throw AdbException(
+                "Sem root, o app não consegue ler $path. " +
+                    "Rode com alvo local + root, ou use o alvo USB/Wi‑Fi (adb pull)."
+            )
+        }
+        return file.readBytes()
     }
 
     /**
@@ -152,5 +208,148 @@ object RootShell {
         }
 
         return ShellResult(raw, process.exitValue(), false, false, false)
+    }
+}
+
+/**
+ * Logcat local via `sh -c` (sem root). O `sh -c` com comando único executa o
+ * logcat diretamente, então o `destroyForcibly` no [stop] mata o próprio
+ * logcat — sem processo órfão.
+ */
+private class ShLogSession(
+    command: String,
+    private val callbacks: LogcatCallbacks
+) : LogSession {
+    @Volatile private var stopped = false
+    private var process: Process? = null
+
+    init {
+        val p = try {
+            ProcessBuilder("sh", "-c", command).redirectErrorStream(true).start()
+        } catch (e: Exception) {
+            callbacks.onDone("Erro ao iniciar o logcat: ${e.message}")
+            return
+        }
+        process = p
+        startReader(p)
+    }
+
+    private fun startReader(p: Process) {
+        val thread = Thread {
+            var done = false
+            fun finish(msg: String?) {
+                if (!done) {
+                    done = true
+                    callbacks.onDone(msg)
+                }
+            }
+            try {
+                val ins = p.inputStream
+                val buf = ByteArray(8192)
+                while (!stopped) {
+                    val n = ins.read(buf)
+                    if (n == -1) break
+                    if (n > 0) callbacks.onChunk(String(buf, 0, n, Charsets.UTF_8))
+                }
+                finish(null)
+            } catch (e: Exception) {
+                finish(if (stopped) null else (e.message ?: "Erro no logcat"))
+            } finally {
+                finish(null)
+            }
+        }
+        thread.isDaemon = true
+        thread.start()
+    }
+
+    override fun stop() {
+        stopped = true
+        try {
+            process?.destroyForcibly()
+        } catch (_: Exception) {
+        }
+    }
+}
+
+/**
+ * Logcat local via `su` (com root). O logcat roda em background dentro da
+ * sessão interativa do su; ao parar, enviamos `kill $LOGPID` + `exit` —
+ * encerramento limpo, sem logcat órfão.
+ */
+private class SuLogSession(
+    command: String,
+    private val callbacks: LogcatCallbacks
+) : LogSession {
+    @Volatile private var stopped = false
+    private var process: Process? = null
+    private var stdin: java.io.OutputStream? = null
+
+    init {
+        val p = try {
+            ProcessBuilder("su").redirectErrorStream(true).start()
+        } catch (e: Exception) {
+            callbacks.onDone("Erro ao iniciar o su: ${e.message}")
+            return
+        }
+        process = p
+        val out = p.outputStream
+        stdin = out
+        try {
+            // Rode o logcat em background e espere por ele — assim o stdout
+            // flui para cá e, ao parar, matamos só o logcat (e saímos do su).
+            out.write("$command & LOGPID=\$!; wait \$LOGPID\n".toByteArray(Charsets.UTF_8))
+            out.flush()
+        } catch (_: Exception) {
+        }
+        val thread = Thread {
+            var done = false
+            fun finish(msg: String?) {
+                if (!done) {
+                    done = true
+                    callbacks.onDone(msg)
+                }
+            }
+            var gotOutput = false
+            try {
+                val ins = p.inputStream
+                val buf = ByteArray(8192)
+                while (!stopped) {
+                    val n = ins.read(buf)
+                    if (n == -1) break
+                    if (n > 0) {
+                        gotOutput = true
+                        callbacks.onChunk(String(buf, 0, n, Charsets.UTF_8))
+                    }
+                }
+                if (!gotOutput && !stopped) {
+                    // O su terminou sem rodar nada: permissão negada ou su ausente.
+                    finish(
+                        "Não foi possível iniciar o logcat com root " +
+                            "(permissão negada ou su indisponível)."
+                    )
+                } else {
+                    finish(null)
+                }
+            } catch (e: Exception) {
+                finish(if (stopped) null else (e.message ?: "Erro no logcat"))
+            } finally {
+                finish(null)
+            }
+        }
+        thread.isDaemon = true
+        thread.start()
+    }
+
+    override fun stop() {
+        stopped = true
+        try {
+            stdin?.write("kill $LOGPID\nexit\n".toByteArray(Charsets.UTF_8))
+            stdin?.flush()
+        } catch (_: Exception) {
+        }
+        try {
+            process?.destroyForcibly()
+        } catch (_: Exception) {
+        }
     }
 }

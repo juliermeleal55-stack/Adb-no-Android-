@@ -4,6 +4,18 @@ import android.content.Context
 import android.hardware.usb.UsbDevice
 import java.io.File
 
+/** Uma sessão de logcat ao vivo (stream) em execução. */
+interface LogSession {
+    /** Para o stream. O [LogcatCallbacks.onDone] ainda é chamado em seguida. */
+    fun stop()
+}
+
+/** Callbacks de uma sessão de logcat. [onDone] recebe null se parou limpo, ou a mensagem do erro. */
+class LogcatCallbacks(
+    val onChunk: (String) -> Unit,
+    val onDone: (String?) -> Unit
+)
+
 /** Status de um dispositivo na lista. */
 enum class DeviceStatus {
     UNKNOWN,
@@ -60,7 +72,7 @@ object AdbClient {
     }
 
     /** Roda um comando no shell do aparelho remoto (Wi‑Fi). */
-    fun shell(host: String, port: Int, command: String, timeoutMs: Long = 60_000): ShellResult {
+    fun shell(host: String, port: Int, command: String, timeoutMs: Long = 180_000): ShellResult {
         val connection = AdbConnection(TcpTransport(host, port), auth)
         return withConnection(connection, command, timeoutMs)
     }
@@ -81,7 +93,7 @@ object AdbClient {
     }
 
     /** Roda um comando no shell do aparelho conectado por USB. */
-    fun shellUsb(device: UsbDevice, command: String, timeoutMs: Long = 60_000): ShellResult {
+    fun shellUsb(device: UsbDevice, command: String, timeoutMs: Long = 180_000): ShellResult {
         val context = appContext
             ?: return ShellResult("App não inicializado.", null, false, true, false)
         val connection = try {
@@ -100,9 +112,101 @@ object AdbClient {
         return if (parts.size >= 4) parts[3].trim() else ""
     }
 
+    // ===================== logcat ao vivo (stream) =====================
+
+    /**
+     * Logcat ao vivo no aparelho remoto via Wi‑Fi — igual ao `adb logcat` do PC.
+     * Chama [LogcatCallbacks.onChunk] a cada bloco recebido, em uma thread de
+     * fundo, até [LogSession.stop] (ou o aparelho fechar a sessão).
+     *
+     * @param logcatArgs argumentos do logcat (ex.: "-b all" ou "-b all *:E").
+     */
+    fun logcatTcp(host: String, port: Int, logcatArgs: String, callbacks: LogcatCallbacks): LogSession {
+        val session = AdbLogSession(
+            openConnection = { AdbConnection(TcpTransport(host, port), auth) },
+            service = "shell:logcat $logcatArgs",
+            callbacks = callbacks
+        )
+        session.start()
+        return session
+    }
+
+    /** Logcat ao vivo no aparelho conectado por USB (cabo/OTG). */
+    fun logcatUsb(device: UsbDevice, logcatArgs: String, callbacks: LogcatCallbacks): LogSession {
+        val context = appContext
+            ?: throw AdbException("App não inicializado.")
+        val session = AdbLogSession(
+            openConnection = { AdbUsb.open(context, device, auth) },
+            service = "shell:logcat $logcatArgs",
+            callbacks = callbacks
+        )
+        session.start()
+        return session
+    }
+
     internal fun appContextOrNull(): Context? = appContext
 
     internal fun authOrNull(): AdbAuth? = auth
+
+    /**
+     * Sessão de logcat sobre um transporte ADB (USB ou TCP). A leitura fica
+     * SEM timeout (um logcat silencioso não pode matar o stream); parar a
+     * sessão fecha o transporte e a thread termina sozinha.
+     */
+    private class AdbLogSession(
+        private val openConnection: () -> AdbConnection,
+        private val service: String,
+        private val callbacks: LogcatCallbacks
+    ) : LogSession {
+        @Volatile private var stopped = false
+        @Volatile private var connection: AdbConnection? = null
+
+        fun start() {
+            val thread = Thread {
+                var conn: AdbConnection? = null
+                @Volatile var done = false
+                fun finish(msg: String?) {
+                    if (!done) {
+                        done = true
+                        callbacks.onDone(msg)
+                    }
+                }
+                try {
+                    conn = openConnection()
+                    connection = conn
+                    conn.connect()
+                    // 0 = sem timeout: o stream fica aberto até o usuário parar.
+                    conn.setTimeout(0)
+                    val remoteId = conn.openService(service)
+                    while (!stopped) {
+                        val payload = conn.readServicePayload(remoteId) ?: break // CLSE = fim
+                        if (payload.isNotEmpty()) {
+                            callbacks.onChunk(payload.toString(Charsets.UTF_8))
+                        }
+                    }
+                    finish(null)
+                } catch (e: Exception) {
+                    finish(if (stopped) null else (e.message ?: e.javaClass.simpleName))
+                } finally {
+                    try {
+                        conn?.close()
+                    } catch (_: Exception) {
+                    }
+                    finish(null)
+                }
+            }
+            thread.isDaemon = true
+            thread.start()
+        }
+
+        override fun stop() {
+            stopped = true
+            try {
+                connection?.close()
+            } catch (_: Exception) {
+            }
+        }
+    }
 
     private fun withConnection(
         connection: AdbConnection,

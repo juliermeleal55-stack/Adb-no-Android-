@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Downloads gerados pelo app (logs, adb pull, …) -->
+    <external-files-path
+        name="downloads"
+        path="Download/" />
+    <!-- Arquivos copiados do gerenciador (adb push, sideload) -->
+    <cache-path
+        name="cache"
+        path="." />
+</paths>

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -25,8 +26,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
@@ -42,11 +44,18 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -397,7 +406,7 @@ private fun CommandRow(
         if (preset.ready) {
             IconButton(onClick = onRun) {
                 Icon(
-                    Icons.Filled.PlayCircle,
+                    Icons.Filled.PlayArrow,
                     contentDescription = "Rodar ${preset.name}",
                     tint = TerminalGreen
                 )
@@ -415,6 +424,10 @@ private fun CommandRow(
 
 @Composable
 private fun ConsoleEntryView(entry: ConsoleEntry) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboard.current
+    var clipOpen by remember { mutableStateOf(false) }
+    var savedMsg by remember { mutableStateOf<String?>(null) }
     Column {
         Text(
             "▸ [${entry.target.label()}] ${entry.command}",
@@ -443,13 +456,56 @@ private fun ConsoleEntryView(entry: ConsoleEntry) {
                 softWrap = true
             )
             Spacer(Modifier.height(4.dp))
+
+            // ---------------- Cortar / copiar / salvar este log ----------------
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(
+                    onClick = {
+                        clipOpen = true
+                        savedMsg = null
+                    },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
+                    Text("✂ Cortar log", fontSize = 12.sp, color = TerminalGreen)
+                }
+                TextButton(
+                    onClick = {
+                        clipboard.setText(AnnotatedString(r.output))
+                        savedMsg = "Copiado para a área de transferência."
+                    },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
+                    Text("📋 Copiar tudo", fontSize = 12.sp, color = TerminalGreen)
+                }
+                TextButton(
+                    onClick = {
+                        val f = FileSaver.saveText(
+                            context,
+                            "saida_" + FileSaver.cleanName(entry.command) + "_log",
+                            r.output
+                        )
+                        savedMsg = "Salvo em ${f.absolutePath}"
+                    },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
+                    Text("💾 Salvar .txt", fontSize = 12.sp, color = TerminalGreen)
+                }
+            }
+            savedMsg?.let {
+                Text(
+                    it,
+                    fontSize = 11.sp,
+                    color = TerminalAmber,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+            }
         }
         val status: String
         val statusColor: Color
         val isRemote = entry.target is Target.Remote
         when {
             r.timedOut -> {
-                status = "⏱ Tempo esgotado (90 s) — o comando foi cancelado."
+                status = "⏱ Tempo esgotado (180 s) — o comando foi cancelado."
                 statusColor = TerminalAmber
             }
             r.failed -> {
@@ -480,6 +536,122 @@ private fun ConsoleEntryView(entry: ConsoleEntry) {
             color = statusColor
         )
     }
+
+    // Diálogo "cortar log": seleciona (com o dedo) o trecho do log e copia/salva.
+    if (clipOpen) {
+        LogClipDialog(
+            command = entry.command,
+            initialText = r.output,
+            onDismiss = { clipOpen = false }
+        )
+    }
+}
+
+/**
+ * "Cortar log": o usuário abre o log num campo editável, seleciona o trecho
+ * com o dedo (segurar → alças de seleção) e copia ou salva só essa parte.
+ * Sem seleção, usa o log inteiro.
+ */
+@Composable
+private fun LogClipDialog(
+    command: String,
+    initialText: String,
+    onDismiss: () -> Unit
+) {
+    val clipboard = LocalClipboard.current
+    val context = LocalContext.current
+    var text by remember { mutableStateOf(initialText) }
+    var selStart by remember { mutableStateOf(0) }
+    var selEnd by remember { mutableStateOf(0) }
+    var savedMsg by remember { mutableStateOf<String?>(null) }
+
+    val start = selStart.coerceIn(0, text.length)
+    val end = selEnd.coerceIn(0, text.length)
+    val selected = if (end > start) text.substring(start, end) else ""
+    val effective = selected.ifBlank { text }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("✂ Cortar log — ${command.take(40)}") },
+        text = {
+            Column {
+                Text(
+                    "Segure no texto e arraste as alças para selecionar o trecho. " +
+                        "Sem seleção, copia/salva tudo.",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 220.dp, max = 340.dp),
+                    textStyle = TextStyle(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    ),
+                    minLines = 8,
+                    maxLines = 14,
+                    onTextRangeChanged = { range: TextRange ->
+                        selStart = range.start
+                        selEnd = range.end
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        focusedBorderColor = TerminalGreen,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
+                        cursorColor = TerminalGreen
+                    ),
+                    shape = RoundedCornerShape(10.dp)
+                )
+                if (selected.isNotEmpty()) {
+                    Text(
+                        "Selecionados ${selected.length} caracteres.",
+                        fontSize = 11.sp,
+                        color = TerminalGreen,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                savedMsg?.let {
+                    Text(
+                        it,
+                        fontSize = 11.sp,
+                        color = TerminalAmber,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    clipboard.setText(AnnotatedString(effective))
+                    onDismiss()
+                }
+            ) {
+                Text(if (selected.isNotEmpty()) "Copiar trecho" else "Copiar tudo")
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(
+                    onClick = {
+                        val f = FileSaver.saveText(context, "corte_log", effective)
+                        savedMsg = "Salvo em ${f.absolutePath}"
+                    }
+                ) {
+                    Text("Salvar .txt")
+                }
+                TextButton(onClick = onDismiss) {
+                    Text("Fechar")
+                }
+            }
+        }
+    )
 }
 
 @Composable

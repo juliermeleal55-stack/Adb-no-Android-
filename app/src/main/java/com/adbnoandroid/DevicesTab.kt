@@ -18,7 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -307,7 +307,7 @@ private fun UsbRow(
         }
         IconButton(onClick = onOpenTerminal, enabled = info.hasPermission) {
             Icon(
-                Icons.Filled.PlayCircle,
+                Icons.Filled.PlayArrow,
                 contentDescription = "Abrir terminal",
                 tint = if (info.hasPermission) TerminalGreen
                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
@@ -371,7 +371,7 @@ private fun NetworkRow(
         }
         IconButton(onClick = onOpenTerminal) {
             Icon(
-                Icons.Filled.PlayCircle,
+                Icons.Filled.PlayArrow,
                 contentDescription = "Abrir terminal",
                 tint = TerminalGreen
             )

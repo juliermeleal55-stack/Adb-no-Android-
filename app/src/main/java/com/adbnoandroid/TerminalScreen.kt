@@ -85,6 +85,9 @@ data class ConsoleEntry(
     val result: ShellResult?
 )
 
+/** Tamanho máximo do buffer de logcat na tela (caracteres). */
+private const val LOG_MAX_CHARS = 250_000
+
 @Composable
 fun TerminalScreen() {
     val context = LocalContext.current
@@ -99,6 +102,13 @@ fun TerminalScreen() {
     val usbModels = remember { mutableStateMapOf<String, String>() }
     var rootState by remember { mutableStateOf(RootState.CHECKING) }
     var isRunning by remember { mutableStateOf(false) }
+
+    // ---------------- Estado do logcat (aba Logs) ----------------
+    // Vive aqui (e não na aba) para o stream continuar na troca de abas.
+    var logText by remember { mutableStateOf("") }
+    var isStreaming by remember { mutableStateOf(false) }
+    var logStatus by remember { mutableStateOf<String?>(null) }
+    var logSession by remember { mutableStateOf<LogSession?>(null) }
 
     val scope = rememberCoroutineScope()
     val inputFocus = remember { FocusRequester() }
@@ -281,6 +291,54 @@ fun TerminalScreen() {
         }
     }
 
+    // ---------------- Logcat ao vivo (aba Logs) ----------------
+
+    fun appendLog(chunk: String) {
+        val next = logText + chunk
+        logText = if (next.length > LOG_MAX_CHARS) {
+            next.substring(next.length - LOG_MAX_CHARS)
+        } else {
+            next
+        }
+    }
+
+    fun startLogcat(args: String) {
+        if (isStreaming) return
+        logText = ""
+        logStatus = "Conectando e iniciando o logcat…"
+        val callbacks = LogcatCallbacks(
+            onChunk = { chunk -> scope.launch { appendLog(chunk) } },
+            onDone = { err ->
+                scope.launch {
+                    isStreaming = false
+                    logSession = null
+                    logStatus = err ?: "Logcat encerrado."
+                }
+            }
+        )
+        val session: LogSession = when (val t = selected) {
+            is Target.Local ->
+                RootShell.startLogcatLocal("logcat $args", callbacks)
+            is Target.Remote ->
+                AdbClient.logcatTcp(t.device.host, t.device.port, args, callbacks)
+            is Target.Usb -> {
+                val d = AdbUsb.deviceByName(context, t.info.deviceName)
+                if (d == null) {
+                    logStatus = "Dispositivo USB desconectado."
+                    return
+                }
+                AdbClient.logcatUsb(d, args, callbacks)
+            }
+        }
+        logSession = session
+        isStreaming = true
+    }
+
+    fun stopLogcat() {
+        logSession?.stop()
+        logStatus = "Parando…"
+    }
+
     fun copyAll() {
         val sb = StringBuilder()
         history.forEach { e ->
@@ -338,6 +396,11 @@ fun TerminalScreen() {
                 Tab(
                     selected = tab == 2,
                     onClick = { tab = 2 },
+                    text = { Text("Logs") }
+                )
+                Tab(
+                    selected = tab == 3,
+                    onClick = { tab = 3 },
                     text = { Text("Sideload") }
                 )
             }
@@ -385,6 +448,25 @@ fun TerminalScreen() {
                         selected = Target.Usb(info, d)
                         tab = 0
                     }
+                )
+                2 -> LogcatTab(
+                    selected = selected,
+                    onSelect = { selected = it },
+                    devices = devices,
+                    usbDevices = usbDevices,
+                    usbStatus = usbStatus,
+                    onSelectUsb = { info ->
+                        val d = AdbUsb.deviceByName(context, info.deviceName)
+                            ?: return@LogcatTab
+                        selected = Target.Usb(info, d)
+                    },
+                    rootGranted = rootState == RootState.GRANTED,
+                    logText = logText,
+                    isStreaming = isStreaming,
+                    logStatus = logStatus,
+                    onStartStream = { args -> startLogcat(args) },
+                    onStopStream = { stopLogcat() },
+                    onClearLog = { logText = "" }
                 )
                 else -> SideloadTab(
                     usbDevices = usbDevices,
