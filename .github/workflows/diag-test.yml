@@ -12,9 +12,14 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@v4
+      - name: setup java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
       - name: use secret env + echo
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "token present: $([ -n "$GITHUB_TOKEN" ] && echo yes || echo no)"
+          echo "java: $(java -version 2>&1 | head -1)"
           echo "diag done"
