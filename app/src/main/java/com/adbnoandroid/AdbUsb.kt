@@ -3,6 +3,7 @@ package com.adbnoandroid
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.hardware.usb.UsbConfiguration
 import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
@@ -37,12 +38,12 @@ object AdbUsb {
 
     /** Índice da interface ADB no dispositivo, ou null se não for um ADB. */
     fun findAdbInterface(device: UsbDevice): Int? {
-        val config = device.getConfigurationList().firstOrNull() ?: return null
+        val config = device.getConfiguration(0) ?: return null
         for (i in 0 until config.getInterfaceCount()) {
             val itf: UsbInterface = config.getInterface(i)
-            if (itf.interfaceClass == Adb.USB_CLASS &&
-                itf.interfaceSubclass == Adb.USB_SUBCLASS &&
-                itf.interfaceProtocol == Adb.USB_PROTOCOL
+            if ((itf.interfaceClass.toInt() and 0xFF) == Adb.USB_CLASS &&
+                (itf.interfaceSubclass.toInt() and 0xFF) == Adb.USB_SUBCLASS &&
+                (itf.interfaceProtocol.toInt() and 0xFF) == Adb.USB_PROTOCOL
             ) {
                 return i
             }
@@ -124,7 +125,7 @@ object AdbUsb {
         try {
             val itfIndex = findAdbInterface(device)
                 ?: throw AdbServiceException("Dispositivo USB ${device.deviceName} sem interface ADB.")
-            val itf = device.getConfigurationList().firstOrNull()?.getInterface(itfIndex)
+            val itf = device.getConfiguration(0)?.getInterface(itfIndex)
                 ?: throw AdbServiceException("Interface ADB indisponível.")
             try {
                 conn.claimInterface(itf, true)

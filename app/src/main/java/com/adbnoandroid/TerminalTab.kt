@@ -362,7 +362,7 @@ fun TerminalTab(
                     LaunchedEffect(history.size, history.lastOrNull()?.result) {
                         delay(80)
                         consoleScroll.maxValue.takeIf { it > 0 }?.let {
-                            consoleScroll.value = it
+                            consoleScroll.animateScrollTo(it)
                         }
                     }
                 }
