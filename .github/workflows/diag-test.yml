@@ -1,0 +1,20 @@
+name: Diag test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "arena/b2929d32-adb-no-android"
+
+jobs:
+  d:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: use secret env + echo
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "token present: $([ -n "$GITHUB_TOKEN" ] && echo yes || echo no)"
+          echo "diag done"

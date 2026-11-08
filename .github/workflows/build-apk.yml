@@ -8,10 +8,7 @@ name: Build e publicar APK
 #  - botão manual na aba "Actions" (workflow_dispatch)
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-      - "arena/b2929d32-adb-no-android"
+  # push: desligado temporariamente durante o diagnóstico
 
 permissions:
   contents: write
