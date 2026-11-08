@@ -6,6 +6,9 @@ on:
     branches:
       - "arena/b2929d32-adb-no-android"
 
+permissions:
+  contents: write
+
 jobs:
   hello:
     runs-on: ubuntu-latest
