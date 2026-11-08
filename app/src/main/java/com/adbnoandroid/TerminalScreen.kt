@@ -354,7 +354,7 @@ fun TerminalScreen() {
             }
             sb.append("\n")
         }
-        clipboard.copy(AnnotatedString(sb.toString().trimEnd()))
+        copyToClipboard(context, sb.toString().trimEnd())
     }
 
     Scaffold(
@@ -372,7 +372,7 @@ fun TerminalScreen() {
                     }
                 },
                 actions = {
-                    RootBadge(state = rootState, onClick = recheckRoot)
+                    RootBadge(state = rootState, onClick = { recheckRoot() })
                     Spacer(Modifier.width(8.dp))
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

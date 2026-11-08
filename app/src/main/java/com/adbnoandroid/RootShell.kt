@@ -217,7 +217,7 @@ object RootShell {
  * logcat — sem processo órfão.
  */
 private class ShLogSession(
-    command: String,
+    private val command: String,
     private val callbacks: LogcatCallbacks
 ) : LogSession {
     @Volatile private var stopped = false
@@ -280,7 +280,7 @@ private class ShLogSession(
  * encerramento limpo, sem logcat órfão.
  */
 private class SuLogSession(
-    command: String,
+    private val command: String,
     private val callbacks: LogcatCallbacks
 ) : LogSession {
     @Volatile private var stopped = false

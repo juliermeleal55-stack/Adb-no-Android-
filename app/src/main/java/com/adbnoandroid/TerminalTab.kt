@@ -1,7 +1,7 @@
 package com.adbnoandroid
 
+import android.content.Context
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clip
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -61,12 +62,20 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
 /** Aba do Terminal: escolha o alvo, digite (ou toque num comando pronto) e veja a saída. */
+/** Copia [text] para a área de transferência usando a API do Android. */
+fun copyToClipboard(context: Context, text: String) {
+    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE)
+        as android.content.ClipboardManager
+    cm.setPrimaryClip(android.content.ClipData.newPlainText("ADB no Android", text))
+}
+
 @Composable
 fun TerminalTab(
     selected: Target,
@@ -329,8 +338,7 @@ fun TerminalTab(
                 Modifier
                     .fillMaxSize()
                     .padding(horizontal = 12.dp, vertical = 8.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(ConsoleBg)
+                    .background(ConsoleBg, RoundedCornerShape(12.dp))
             ) {
                 if (history.isEmpty()) {
                     Text(
@@ -354,7 +362,7 @@ fun TerminalTab(
                     LaunchedEffect(history.size, history.lastOrNull()?.result) {
                         delay(80)
                         consoleScroll.maxValue.takeIf { it > 0 }?.let {
-                            consoleScroll.jumpTo(it)
+                            consoleScroll.value = it
                         }
                     }
                 }
@@ -470,7 +478,7 @@ private fun ConsoleEntryView(entry: ConsoleEntry) {
                 }
                 TextButton(
                     onClick = {
-                        clipboard.copy(AnnotatedString(r.output))
+                        copyToClipboard(context, r.output)
                         savedMsg = "Copiado para a área de transferência."
                     },
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
@@ -541,7 +549,7 @@ private fun ConsoleEntryView(entry: ConsoleEntry) {
     if (clipOpen) {
         LogClipDialog(
             command = entry.command,
-            initialText = r.output,
+            initialText = entry.result?.output.orEmpty(),
             onDismiss = { clipOpen = false }
         )
     }
@@ -560,13 +568,12 @@ private fun LogClipDialog(
 ) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
-    var text by remember { mutableStateOf(initialText) }
-    var selStart by remember { mutableStateOf(0) }
-    var selEnd by remember { mutableStateOf(0) }
+    var tfv by remember { mutableStateOf(TextFieldValue(initialText)) }
     var savedMsg by remember { mutableStateOf<String?>(null) }
 
-    val start = selStart.coerceIn(0, text.length)
-    val end = selEnd.coerceIn(0, text.length)
+    val text = tfv.text
+    val start = tfv.selection.start.coerceIn(0, text.length)
+    val end = tfv.selection.end.coerceIn(0, text.length)
     val selected = if (end > start) text.substring(start, end) else ""
     val effective = selected.ifBlank { text }
 
@@ -583,8 +590,8 @@ private fun LogClipDialog(
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
+                    value = tfv,
+                    onValueChange = { tfv = it },
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 220.dp, max = 340.dp),
@@ -595,15 +602,9 @@ private fun LogClipDialog(
                     ),
                     minLines = 8,
                     maxLines = 14,
-                    onTextRangeChanged = { range: TextRange ->
-                        selStart = range.start
-                        selEnd = range.end
-                    },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = MaterialTheme.colorScheme.onSurface,
                         unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        focusedBorderColor = TerminalGreen,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
                         cursorColor = TerminalGreen
                     ),
                     shape = RoundedCornerShape(10.dp)
@@ -629,7 +630,7 @@ private fun LogClipDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    clipboard.copy(AnnotatedString(effective))
+                    copyToClipboard(context, effective)
                     onDismiss()
                 }
             ) {
@@ -664,8 +665,7 @@ fun RootBadge(state: RootState, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = CircleShape,
-        color = color.copy(alpha = 0.12f),
-        contentDescription = "Verificar root"
+        color = color.copy(alpha = 0.12f)
     ) {
         Row(
             Modifier.padding(horizontal = 12.dp, vertical = 6.dp),

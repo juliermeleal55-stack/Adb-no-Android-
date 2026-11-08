@@ -227,7 +227,7 @@ sealed class SyncReply {
     class Data(val data: ByteArray) : SyncReply() { override val command = "DATA" }
     class Done : SyncReply() { override val command = "DONE" }
     class Stats(val mode: Long, val size: Long, val mtime: Long) : SyncReply() { override val command = "STAT" }
-    class Other(val command: String) : SyncReply()
+    class Other(override val command: String) : SyncReply()
 }
 
 /**

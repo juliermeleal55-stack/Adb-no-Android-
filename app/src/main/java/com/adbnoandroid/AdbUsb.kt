@@ -37,8 +37,8 @@ object AdbUsb {
 
     /** Índice da interface ADB no dispositivo, ou null se não for um ADB. */
     fun findAdbInterface(device: UsbDevice): Int? {
-        val config = device.configurationList.firstOrNull() ?: return null
-        for (i in 0 until config.interfaceCount) {
+        val config = device.getConfigurationList().firstOrNull() ?: return null
+        for (i in 0 until config.getInterfaceCount()) {
             val itf: UsbInterface = config.getInterface(i)
             if (itf.interfaceClass == Adb.USB_CLASS &&
                 itf.interfaceSubclass == Adb.USB_SUBCLASS &&
@@ -124,7 +124,7 @@ object AdbUsb {
         try {
             val itfIndex = findAdbInterface(device)
                 ?: throw AdbServiceException("Dispositivo USB ${device.deviceName} sem interface ADB.")
-            val itf = device.configurationList.firstOrNull()?.getInterface(itfIndex)
+            val itf = device.getConfigurationList().firstOrNull()?.getInterface(itfIndex)
                 ?: throw AdbServiceException("Interface ADB indisponível.")
             try {
                 conn.claimInterface(itf, true)
@@ -136,7 +136,7 @@ object AdbUsb {
             }
             var epOut: UsbEndpoint? = null
             var epIn: UsbEndpoint? = null
-            for (i in 0 until itf.endpointCount) {
+            for (i in 0 until itf.getEndpointCount()) {
                 val ep = itf.getEndpoint(i)
                 if (ep.direction == UsbConstants.USB_DIR_OUT) epOut = ep
                 if (ep.direction == UsbConstants.USB_DIR_IN) epIn = ep
