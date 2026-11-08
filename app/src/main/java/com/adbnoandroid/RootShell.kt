@@ -26,7 +26,6 @@ data class ShellResult(
  */
 object RootShell {
 
-    private const val EXIT_MARKER = "__ADBNOANDROID_EXIT__"
     private const val TIMEOUT_SECONDS = 90L
 
     @Volatile
@@ -83,7 +82,7 @@ object RootShell {
         // Com su, alimentamos o comando pelo stdin e capturamos o código de
         // saída com um marcador (shell interativo não devolve o código direto).
         val stdinText = if (viaRoot) {
-            "$command\necho $EXIT_MARKER:$?\nexit\n"
+            "$command\necho ${Adb.EXIT_MARKER}:\$?\nexit\n"
         } else {
             null
         }
@@ -136,9 +135,8 @@ object RootShell {
             // não termina com quebra de linha — por isso procuramos o token
             // em qualquer posição (usamos a ÚLTIMA ocorrência, que é a do
             // nosso echo, executado por último).
-            val markerRegex = Regex("${Regex.escape(EXIT_MARKER)}:(-?\\d+)")
-            val lastMatch = markerRegex.findAll(raw).lastOrNull()
-            if (lastMatch == null) {
+            val parsed = findExitMarker(raw)
+            if (parsed == null) {
                 // O su nunca executou nosso comando: permissão negada,
                 // binário ausente ou su não interativo.
                 val msg = when {
@@ -149,8 +147,7 @@ object RootShell {
                 }
                 return ShellResult(msg, null, false, true, false)
             }
-            val exitCode = lastMatch.groupValues[1].toIntOrNull()
-            val clean = raw.substring(0, lastMatch.range.first).trimEnd()
+            val (clean, exitCode) = parsed
             return ShellResult(clean, exitCode, true, false, false)
         }
 

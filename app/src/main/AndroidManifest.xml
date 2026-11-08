@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Nenhum permissão especial é necessária: os comandos rodam via su (root)
-         ou shell local do próprio dispositivo. -->
+    <!-- Necessário para conectar em outros aparelhos pela rede (ADB sem fio) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Usado apenas no modo local, para rodar comandos com root via su -->
 
     <application
         android:allowBackup="true"

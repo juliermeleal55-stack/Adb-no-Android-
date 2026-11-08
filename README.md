@@ -1,109 +1,100 @@
 # ADB no Android 📟
 
-Um aplicativo Android **simples e organizado** para rodar comandos ADB **no próprio aparelho**, igual a um PC — **com suporte a ROOT**.
+Um aplicativo Android **simples e organizado** para rodar comandos ADB **em outros dispositivos pela rede** — igual ao `adb` de um PC — e também **neste aparelho com ROOT**.
 
-Sem PC, sem cabo, sem `adb` externo: você digita o comando (ou toca num comando pronto) e o resultado aparece na tela, num console estilo terminal.
+Sem PC, sem cabo: o app **implementa o protocolo ADB dentro do próprio app** (a mesma conversa de pacotes que o `adb` do PC faz com o `adbd`), conecta no aparelho de destino por Wi‑Fi, autentica com chave RSA (como o PC pede para aceitar a depuração) e roda comandos no shell dele — ou executa localmente via `su` (root).
 
 ---
 
 ## ✨ O que o app faz
 
-- **Executa qualquer comando de shell** direto no aparelho (os mesmos comandos que você usa no `adb shell` do PC).
-- **Funciona com ROOT**: os comandos rodam via `su` (compatível com **Magisk**, **KernelSU** e **SuperSU**).
-- **Fallback sem root**: se não houver root (ou a permissão for negada), o app tenta pelo shell normal do aparelho — muitos comandos continuam funcionando (`getprop`, `pm list packages`, `df -h`, `uptime`…).
-- **Indicador de ROOT** no topo: `ROOT ✓` (verde), `SEM ROOT` (vermelho) ou `VERIFICANDO…` (amarelo). Toque nele para re-verificar.
-- **Comandos prontos organizados por categoria** (Dispositivo, Apps, Sistema, Rede, Arquivos, Ações) com um toque para rodar ou colar no campo.
-- **Igual ao PC**: se você digitar `adb shell getprop …`, o app **remove o prefixo `adb shell`** sozinho e executa o resto.
-- **Console de saída** com histórico, rolagem automática, botões **Limpar** e **Copiar tudo**.
-- Tema escuro estilo terminal, interface mínima e direta.
+### ABA TERMINAL
+- **Escolha o alvo** nos chips do topo:
+  - 📱 **Este aparelho** — os comandos rodam localmente via `su` (Magisk/KernelSU/SuperSU), com fallback para o shell normal se não houver root.
+  - **Dispositivos remotos** — os comandos rodam no shell do outro aparelho, via ADB sem fio.
+- **Campo de comando** + botão **Executar** (ou tecla ↵). Digite igual ao PC: `adb shell …` é aceito — o prefixo é removido sozinho.
+- **Comandos prontos por categoria** (Dispositivo, Apps, Sistema, Rede, Arquivos, Ações):
+  - ▶ roda na hora · ✏️ copia para o campo para ajustar (ex.: `pm uninstall <pacote>`).
+- **Console de saída** com histórico, rolagem automática, `exit code`, botões **Limpar** e **Copiar tudo**, e o alvo de cada execução.
 
-## ️ Telas e uso
+### ABA DISPOSITIVOS
+- **Adicionar aparelho** por `IP:porta` (ex.: `192.168.1.50:5555`).
+- Lista com **status ao vivo**: online / verificando / offline / aguardando permissão.
+- Botões: **Testar** conexão, **Abrir terminal** desse dispositivo, **Remover**.
+- **Guia de conexão** passo a passo (como ativar o ADB sem fio no aparelho de destino).
 
-1. **Campo de comando** (cima): digite qualquer comando e toque em **Executar** (ou a tecla ↵).
-2. **Comandos prontos** (meio): filtre pela categoria nos chips.
-   - ▶ **verde** = roda o comando na hora.
-   - ✏️ = copia o comando para o campo para você ajustar (ex.: trocar `<pacote>` pelo nome do app) e então executar.
-3. **Saída** (baixo): o resultado de cada comando, com status:
-   - `✓ Concluído (root)` — rodou com root.
-   - `⚠ Concluído sem root` — rodou, mas sem privilégio de root.
-   - `✗ Falha na execução` — erro (a mensagem aparece acima).
-   - `⏱ Tempo esgotado (90 s)` — o comando levou tempo demais e foi cancelado.
+### AUTENTICAÇÃO (igual ao PC)
+- O app gera e guarda uma **chave RSA 2048** (equivalente do `~/.android/adbkey` do PC) no armazenamento privado.
+- Na **primeira** conexão, o aparelho de destino mostra o diálogo **“Permitir depuração?”** — toque em **Permitir** uma vez; depois a conexão passa direto.
+- Com ROOT no aparelho local, os comandos locais rodam como `uid=0`.
 
-### Exemplos de comandos
+## ️ Como conectar em outro aparelho
 
-```
-getprop ro.product.model          # modelo do aparelho
-pm list packages -3               # apps que você instalou
-pm uninstall com.seu.app          # desinstalar um app
-pm install /sdcard/Download/x.apk # instalar um APK (com root)
-df -h                             # armazenamento
-ip addr                           # endereços IP
-dumpsys battery                   # bateria
-reboot                            # reiniciar (use com cuidado!)
-```
+1. **Mesma rede Wi‑Fi** nos dois aparelhos.
+2. No **aparelho de destino**, ative o ADB sem fio:
+   - **Android 11 ou mais novo**: *Configurações → Opções do desenvolvedor → Depuração sem fio* — use o **IP:porta** mostrados ali (ex.: `192.168.1.50:37245`).
+   - **Android 10 ou mais antigo**: conecte por USB uma vez e execute `adb tcpip 5555` (fica na porta `5555`).
+3. No app, aba **Dispositivos** → adicione o endereço → na primeira conexão, **aceite o diálogo no aparelho de destino**.
+4. Toque em ▶ e mande comandos: `getprop`, `pm list packages`, `df -h`, `reboot`…
 
-> ⚠️ **Aviso**: com root, o app tem poder total sobre o sistema. Um comando errado
-> (ex.: `rm -rf`, `reboot recovery`) pode danificar seu aparelho ou apagar dados.
-> **Use por sua conta e risco.**
+> ⚠️ **Aviso**: com root (alvo local) ou com acesso ADB (alvos remotos), os comandos têm poder total sobre o sistema. Um comando errado pode danificar o aparelho ou apagar dados. **Use por sua conta e risco.**
 
 ---
 
-##  Como instalar / compilar
+## 🔨 Como instalar / compilar
 
-O projeto é Android nativo (Kotlin + Jetpack Compose). Duas formas de gerar o APK:
+Projeto Android nativo (Kotlin + Jetpack Compose). Duas formas de gerar o APK:
 
 ### Opção 1 — Android Studio (mais fácil)
-
-1. Instale o [Android Studio](https://developer.android.com/studio) (versão **Koala** ou mais nova).
-2. **File → Open** e escolha esta pasta do projeto.
-3. Aguarde o sync do Gradle (ele baixa as dependências automaticamente).
-4. Toque em ▶ **Run** com o aparelho conectado (USB debug) ou use
-   **Build → Build Bundle(s)/APK(s) → Build APK(s)**.
-5. O APK fica em `app/build/outputs/apk/debug/app-debug.apk`.
+1. Instale o [Android Studio](https://developer.android.com/studio) (versão **Koala** ou mais nova, JDK 17 embutido).
+2. **File → Open** → escolha esta pasta → aguarde o sync do Gradle.
+3. ▶ **Run** (aparelho com USB debug) ou **Build → Build Bundle(s)/APK(s) → Build APK(s)**.
+4. APK em `app/build/outputs/apk/debug/app-debug.apk`.
 
 ### Opção 2 — Linha de comando
-
-Com JDK 17 e Android SDK instalados (variável `ANDROID_HOME` configurada):
-
+Com JDK 17 e Android SDK (`ANDROID_HOME`):
 ```bash
 ./gradlew assembleDebug        # Linux/macOS
 gradlew.bat assembleDebug      # Windows
 ```
 
-APK gerado em `app/build/outputs/apk/debug/app-debug.apk`. Copie para o aparelho e instale.
-
-### Requisitos do aparelho
-
-- Android **7.0 (API 24)** ou mais novo.
-- Para rodar com root: aparelho **rootado** (Magisk, KernelSU ou SuperSU).
-  Na primeira execução o gerenciador de root vai perguntar a permissão — **aceite**.
-- Nenhuma permissão especial é solicitada pelo app (os comandos rodam via `su`).
+### Requisitos
+- Android **7.0 (API 24)**+ para o app.
+- Para o **alvo remoto**: o `adbd` dele acessível pela rede (Depuração sem fio ou `adb tcpip 5555`).
+- Para o **alvo local com root**: Magisk, KernelSU ou SuperSU (aceite a permissão quando aparecer).
+- Permissões do app: apenas **INTERNET** (para falar com os outros aparelhos).
 
 ---
 
 ## 🛠️ Como funciona por baixo dos panos
 
-- **Com root**: o app abre o `su` (shell interativo do root) e "digita" o comando no stdin — a mesma técnica usada por terminais de root. Isso funciona em qualquer implementação de `su` e evita problemas de aspas/escape. O código de saída é capturado com um marcador (`echo` no final do comando).
-- **Sem root**: o app cai para `sh -c "<comando>"` como usuário `shell`.
-- **Timeout**: comandos que travam são cancelados após **90 segundos**.
-- A leitura da saída acontece em thread separada (evita travar com saídas grandes) e a UI roda em coroutines.
+- **ADB sem fio em Kotlin** (`AdbProtocol.kt`): conexão TCP direta no `adbd` do destino, banner `CNXN`, autenticação `AUTH` (token → assinatura `NONEwithRSA` → chave pública PEM), serviço `OPEN:shell:<comando>` e leitura `WRTE`/`OKAY`/`CLSE` com checksum — o protocolo é o mesmo do AOSP.
+- **Exit code**: como o serviço `shell:` (v1) não devolve o código, o app executa `<comando>; echo __marker__:$?` e lê o marcador — mesma técnica dos terminais de root.
+- **Modo local** (`RootShell.kt`): abre o `su` (shell interativo) e “digita” o comando no stdin (compatível com Magisk/KernelSU/SuperSU); sem root, cai para `sh -c`.
+- **Timeouts**: conexão 5 s; comando remoto 60 s; comando local 90 s.
+- UI em coroutines; leitura de saída em threads separadas (evita travar com saídas grandes).
 
 ## 📁 Estrutura do projeto
 
 ```
 app/src/main/java/com/adbnoandroid/
-├── MainActivity.kt      # entrada do app
+├── MainActivity.kt      # entrada do app (inicializa AdbClient)
 ├── Theme.kt             # tema escuro estilo terminal
-├── TerminalScreen.kt    # toda a interface (campo, categorias, console)
+├── TerminalScreen.kt    # abas, estado, execução e dispositivos
+├── TerminalTab.kt       # alvo + campo + comandos prontos + console
+├── DevicesTab.kt        # adicionar/testar/remover dispositivos
 ├── Commands.kt          # comandos prontos por categoria
-└── RootShell.kt         # motor de execução (su / sh, timeout, exit code)
+├── AdbProtocol.kt       # protocolo ADB (CNXN/AUTH/OPEN/WRTE/CLSE)
+├── AdbAuth.kt           # chave RSA 2048 (geração, persistência, assinatura)
+├── AdbClient.kt         # alto nível: probe(), shell(), devices
+├── AdbUtils.kt          # parsing do marcador de exit code
+├── RootShell.kt         # execução local via su / sh
+└── DevicesStore.kt      # persistência da lista de dispositivos
 ```
 
 ## 📝 Notas e limitações
 
-- O app executa o comando **exatamente como digitado** — sem root, comandos que
-  exigem privilégio (ex.: `mount`, arquivos de `/data`) vão falhar; o status
-  indica quando rodou "sem root".
-- Comandos interativos (`top` sem `-n`, `cat` sem arquivo) podem consumir o
-  timeout de 90 s.
+- O app fala com o `adbd` **direto** (sem servidor ADB local): um novo “handshake” rápido por comando — simples e confiável.
+- Na primeira conexão com cada aparelho, é **obrigatório aceitar o diálogo** de depuração nele (igual ao PC).
+- Comandos interativos (`top` sem `-n`) podem estourar o timeout.
 - Projeto educacional/ferramenta pessoal — contribuições são bem-vindas.
