@@ -63,6 +63,9 @@ fun TerminalTab(
     selected: Target,
     onSelect: (Target) -> Unit,
     devices: List<AdbDeviceInfo>,
+    usbDevices: List<AdbUsb.UsbDeviceInfo>,
+    usbStatus: Map<String, DeviceStatus>,
+    onSelectUsb: (AdbUsb.UsbDeviceInfo) -> Unit,
     onAddDevice: () -> Unit,
     input: String,
     onInput: (String) -> Unit,
@@ -96,6 +99,28 @@ fun TerminalTab(
                     selectedLabelColor = TerminalGreen
                 )
             )
+            usbDevices.forEach { info ->
+                FilterChip(
+                    selected = selected is Target.Usb &&
+                        (selected as Target.Usb).info.deviceName == info.deviceName,
+                    onClick = { onSelectUsb(info) },
+                    label = {
+                        Row {
+                            Box(
+                                Modifier
+                                    .size(7.dp)
+                                    .background(statusColor(usbStatus[info.deviceName] ?: DeviceStatus.UNKNOWN), CircleShape)
+                            )
+                            Spacer(Modifier.width(5.dp))
+                            Text(info.label(), fontSize = 12.sp)
+                        }
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = TerminalGreen.copy(alpha = 0.2f),
+                        selectedLabelColor = TerminalGreen
+                    )
+                )
+            }
             devices.forEach { device ->
                 FilterChip(
                     selected = selected is Target.Remote &&
@@ -175,8 +200,8 @@ fun TerminalTab(
         }
 
         Text(
-            "Alvo: ${selected.label()}. Você pode digitar igual ao PC (\"adb shell …\"). " +
-                "No aparelho local os comandos rodam com ROOT. Use com cuidado.",
+            "Alvo: ${selected.label()}. Digite igual ao PC (\"adb shell …\" é aceito). " +
+                "USB = cabo/OTG, como o adb do PC; local = com ROOT. Use com cuidado.",
             fontSize = 11.sp,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
             modifier = Modifier.padding(horizontal = 12.dp)

@@ -1,7 +1,6 @@
 package com.adbnoandroid
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.item
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -47,15 +46,26 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 
-/** Aba de Dispositivos: gerencia os aparelhos remotos alcançáveis por ADB sem fio. */
+/**
+ * Aba Dispositivos: a "adb devices" do app — lista ao vivo os aparelhos
+ * conectados por USB (cabo/OTG) e os endereços de rede salvos.
+ */
 @Composable
 fun DevicesTab(
     devices: List<AdbDeviceInfo>,
+    usbDevices: List<AdbUsb.UsbDeviceInfo>,
+    usbStatus: Map<String, DeviceStatus>,
+    usbModels: Map<String, String>,
     onAdd: (String) -> Boolean,
     onRemove: (AdbDeviceInfo) -> Unit,
     onTest: (AdbDeviceInfo) -> Unit,
-    onOpenTerminal: (AdbDeviceInfo) -> Unit
+    onOpenTerminal: (AdbDeviceInfo) -> Unit,
+    onTestUsb: (AdbUsb.UsbDeviceInfo) -> Unit,
+    onPermissionUsb: (AdbUsb.UsbDeviceInfo) -> Unit,
+    onOpenUsbTerminal: (AdbUsb.UsbDeviceInfo) -> Unit
 ) {
     var address by remember { mutableStateOf("") }
     var addError by remember { mutableStateOf("") }
@@ -65,8 +75,43 @@ fun DevicesTab(
             .fillMaxSize()
             .padding(horizontal = 12.dp)
     ) {
+        // ================= USB (cabo/OTG) =================
         Text(
-            "Conectar em outro aparelho",
+            "Via USB (cabo / OTG)",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(Modifier.height(4.dp))
+
+        if (usbDevices.isEmpty()) {
+            Text(
+                "Nenhum aparelho ADB detectado por USB. Conecte um cabo USB ao " +
+                    "aparelho de destino (via adaptador OTG) com a depuração USB ativada.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+        } else {
+            usbDevices.forEach { info ->
+                UsbRow(
+                    info = info,
+                    status = usbStatus[info.deviceName] ?: DeviceStatus.UNKNOWN,
+                    model = usbModels[info.deviceName].orEmpty(),
+                    onPermission = { onPermissionUsb(info) },
+                    onTest = { onTestUsb(info) },
+                    onOpenTerminal = { onOpenUsbTerminal(info) }
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 2.dp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                )
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+
+        // ================= Rede (Wi-Fi) =================
+        Text(
+            "Via rede (Wi‑Fi)",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold
         )
@@ -87,15 +132,16 @@ fun DevicesTab(
                 textStyle = MaterialTheme.typography.bodyMedium.copy(
                     fontFamily = FontFamily.Monospace
                 ),
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Ascii,
                     imeAction = ImeAction.Done
                 ),
-                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                keyboardActions = KeyboardActions(
                     onDone = {
-                        val ok = onAdd(address)
-                        if (!ok) addError =
-                            "Endereço inválido. Use IP ou IP:porta (ex.: 192.168.1.50:5555)."
+                        if (!onAdd(address)) {
+                            addError =
+                                "Endereço inválido. Use IP ou IP:porta (ex.: 192.168.1.50:5555)."
+                        }
                     }
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -108,8 +154,7 @@ fun DevicesTab(
             Spacer(Modifier.width(8.dp))
             Button(
                 onClick = {
-                    val ok = onAdd(address)
-                    if (ok) {
+                    if (onAdd(address)) {
                         address = ""
                         addError = ""
                     } else {
@@ -119,7 +164,7 @@ fun DevicesTab(
                 },
                 colors = ButtonDefaults.buttonColors(
                     containerColor = TerminalGreen,
-                    contentColor = androidx.compose.ui.graphics.Color.Black
+                    contentColor = Color.Black
                 ),
                 shape = RoundedCornerShape(12.dp)
             ) {
@@ -132,19 +177,13 @@ fun DevicesTab(
         }
         Spacer(Modifier.height(10.dp))
 
-        Text(
-            "Dispositivos",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold
-        )
-        Spacer(Modifier.height(4.dp))
-
+        // ---------------- lista de rede ----------------
         LazyColumn(
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(vertical = 4.dp)
         ) {
             items(devices, key = { it.address() }) { device ->
-                DeviceRow(
+                NetworkRow(
                     device = device,
                     onTest = { onTest(device) },
                     onOpenTerminal = { onOpenTerminal(device) },
@@ -158,8 +197,7 @@ fun DevicesTab(
             if (devices.isEmpty()) {
                 item {
                     Text(
-                        "Nenhum dispositivo ainda. Adicione o IP do aparelho " +
-                            "onde você quer rodar comandos.",
+                        "Nenhum endereço de rede salvo.",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                         modifier = Modifier.padding(vertical = 12.dp)
@@ -184,15 +222,20 @@ fun DevicesTab(
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "1. Os dois aparelhos precisam estar na mesma rede Wi-Fi.\n" +
-                        "2. No aparelho de destino, ative o ADB sem fio:\n" +
-                        "   • Android 11 ou mais novo: Configurações → Opções do desenvolvedor → " +
-                        "“Depuração sem fio” (use o IP:porta mostrados lá);\n" +
-                        "   • Versões antigas: conecte por USB uma vez e rode " +
-                        "“adb tcpip 5555” (porta 5555).\n" +
-                        "3. Adicione o IP aqui. Na primeira conexão, o aparelho de destino " +
-                        "mostra um diálogo “Permitir depuração” — toque em PERMITIR.\n" +
-                        "4. Toque em ▶ para abrir o terminal desse dispositivo.",
+                    "USB (cabo/OTG) — igual ao PC com platform-tools:\n" +
+                        "1. Conecte um cabo USB ao aparelho de destino (use adaptador OTG " +
+                        "se precisar); ele precisa ter Depuração USB ativada.\n" +
+                        "2. Quando o diálogo \"Permitir acesso USB\" aparecer neste " +
+                        "aparelho, toque em PERMITIR.\n" +
+                        "3. O aparelho aparece nesta lista (como no adb devices) — " +
+                        "toque em ▶ para o terminal.\n\n" +
+                        "Wi‑Fi:\n" +
+                        "1. Mesma rede Wi‑Fi nos dois aparelhos.\n" +
+                        "2. No destino: \"Depuração sem fio\" (Android 11+; use o " +
+                        "IP:porta mostrados) ou \"adb tcpip 5555\" (mais antigos).\n" +
+                        "3. Adicione o IP aqui.\n\n" +
+                        "Na primeira conexão (USB ou Wi‑Fi), o aparelho de destino mostra " +
+                        "\"Permitir depuração?\" — toque em PERMITIR uma vez.",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
                     lineHeight = 18.sp
@@ -203,7 +246,78 @@ fun DevicesTab(
 }
 
 @Composable
-private fun DeviceRow(
+private fun UsbRow(
+    info: AdbUsb.UsbDeviceInfo,
+    status: DeviceStatus,
+    model: String,
+    onPermission: () -> Unit,
+    onTest: () -> Unit,
+    onOpenTerminal: () -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .size(9.dp)
+                .background(statusColor(status), CircleShape)
+        )
+        Spacer(Modifier.width(8.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                info.label(),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            val extra = buildString {
+                append(info.deviceName)
+                if (model.isNotBlank()) append("  •  ").append(model)
+            }
+            Text(
+                extra,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                if (!info.hasPermission) "aguardando permissão USB" else statusText(status),
+                fontSize = 10.sp,
+                color = statusColor(status)
+            )
+        }
+        if (!info.hasPermission) {
+            TextButton(onClick = onPermission) {
+                Text("Permitir USB", fontSize = 12.sp)
+            }
+        }
+        IconButton(onClick = onTest) {
+            Icon(
+                Icons.Filled.Refresh,
+                contentDescription = "Testar conexão",
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+        }
+        IconButton(onClick = onOpenTerminal, enabled = info.hasPermission) {
+            Icon(
+                Icons.Filled.PlayCircle,
+                contentDescription = "Abrir terminal",
+                tint = if (info.hasPermission) TerminalGreen
+                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun NetworkRow(
     device: AdbDeviceInfo,
     onTest: () -> Unit,
     onOpenTerminal: () -> Unit,
@@ -273,10 +387,10 @@ private fun DeviceRow(
 }
 
 private fun statusText(status: DeviceStatus): String = when (status) {
-    DeviceStatus.ONLINE -> "online"
+    DeviceStatus.ONLINE -> "device (conectado)"
     DeviceStatus.CHECKING -> "verificando…"
-    DeviceStatus.OFFLINE -> "offline — confira IP e rede"
+    DeviceStatus.OFFLINE -> "offline — confira o cabo/rede"
     DeviceStatus.NEEDS_AUTH -> "aguardando permissão no aparelho"
-    DeviceStatus.ERROR -> "erro de conexão"
+    DeviceStatus.ERROR -> "erro — veja a permissão USB"
     DeviceStatus.UNKNOWN -> "desconhecido"
 }

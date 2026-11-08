@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Necessário para conectar em outros aparelhos pela rede (ADB sem fio) -->
+    <!-- Conectar em outros aparelhos pela rede (ADB sem fio) -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Usado apenas no modo local, para rodar comandos com root via su -->
+
+    <!-- USB Host (cabo/OTG) — opcional: sem OTG o app segue funcionando via Wi‑Fi -->
+    <uses-feature
+        android:name="android.hardware.usb.host"
+        android:required="false" />
 
     <application
         android:allowBackup="true"
@@ -22,6 +26,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Plugue/remoção de USB e permissão de acesso -->
+        <receiver
+            android:name=".UsbReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+                <action android:name="android.hardware.usb.action.USB_DEVICE_DETACHED" />
+                <action android:name="com.adbnoandroid.USB_PERMISSION" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

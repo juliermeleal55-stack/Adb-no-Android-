@@ -1,5 +1,6 @@
 package com.adbnoandroid
 
+import android.hardware.usb.UsbDevice
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -62,14 +63,16 @@ import kotlinx.coroutines.withContext
 /** Estado da verificação de root local. */
 enum class RootState { CHECKING, GRANTED, DENIED }
 
-/** Para onde o comando vai: este aparelho (root) ou um dispositivo remoto. */
+/** Para onde o comando vai: este aparelho (root), USB (cabo) ou rede (Wi‑Fi). */
 sealed class Target {
     object Local : Target()
     data class Remote(val device: AdbDeviceInfo) : Target()
+    class Usb(val info: AdbUsb.UsbDeviceInfo, val usb: UsbDevice) : Target()
 
     fun label(): String = when (this) {
         is Local -> "Este aparelho"
         is Remote -> device.label()
+        is Usb -> info.label()
     }
 }
 
@@ -91,6 +94,9 @@ fun TerminalScreen() {
     var selected by remember { mutableStateOf<Target>(Target.Local) }
     val history = remember { mutableStateListOf<ConsoleEntry>() }
     val devices = remember { mutableStateListOf<AdbDeviceInfo>() }
+    val usbDevices = remember { mutableStateListOf<AdbUsb.UsbDeviceInfo>() }
+    val usbStatus = remember { mutableStateMapOf<String, DeviceStatus>() }
+    val usbModels = remember { mutableStateMapOf<String, String>() }
     var rootState by remember { mutableStateOf(RootState.CHECKING) }
     var isRunning by remember { mutableStateOf(false) }
 
@@ -120,6 +126,61 @@ fun TerminalScreen() {
         rootState = RootState.CHECKING
         val ok = withContext(Dispatchers.IO) { RootShell.checkRoot() }
         rootState = if (ok) RootState.GRANTED else RootState.DENIED
+    }
+
+    // ---------------- Dispositivos USB (plugue/quente) ----------------
+    fun refreshUsb() {
+        val list = AdbUsb.listAdbDevices(context)
+        val oldNames = usbDevices.map { it.deviceName }.toSet()
+        val newNames = list.map { it.deviceName }.toSet()
+        usbDevices.clear()
+        usbDevices.addAll(list)
+        if (newNames != oldNames) {
+            // Dispositivos mudaram (plugue/remoção): zera status/modelo
+            usbStatus.clear()
+            usbModels.clear()
+        }
+        // Se o alvo USB foi desconectado, volta para o alvo local
+        if (selected is Target.Usb &&
+            list.none { it.deviceName == (selected as Target.Usb).info.deviceName }
+        ) {
+            selected = Target.Local
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        // O collect dispara imediatamente (valor atual) e a cada plugue/permisso
+        UsbEvents.version.collect { refreshUsb() }
+    }
+
+    fun probeUsb(info: AdbUsb.UsbDeviceInfo) {
+        val device = AdbUsb.deviceByName(context, info.deviceName) ?: return
+        if (!AdbUsb.hasPermission(context, device)) {
+            usbStatus[info.deviceName] = DeviceStatus.ERROR
+            return
+        }
+        usbStatus[info.deviceName] = DeviceStatus.CHECKING
+        scope.launch {
+            val (status, model) = withContext(Dispatchers.IO) {
+                try {
+                    val banner = AdbClient.probeUsb(device)
+                    DeviceStatus.ONLINE to AdbClient.parseModel(banner)
+                } catch (e: AdbAuthException) {
+                    DeviceStatus.NEEDS_AUTH to ""
+                } catch (e: AdbConnectException) {
+                    DeviceStatus.OFFLINE to ""
+                } catch (e: Exception) {
+                    DeviceStatus.ERROR to ""
+                }
+            }
+            usbStatus[info.deviceName] = status
+            usbModels[info.deviceName] = model
+        }
+    }
+
+    fun requestUsbPermission(info: AdbUsb.UsbDeviceInfo) {
+        val device = AdbUsb.deviceByName(context, info.deviceName) ?: return
+        AdbUsb.requestPermission(context, device)
     }
 
     fun recheckRoot() {
@@ -199,10 +260,18 @@ fun TerminalScreen() {
         isRunning = true
         scope.launch {
             val res = withContext(Dispatchers.IO) {
-                if (target is Target.Local) {
-                    RootShell.execute(cmd)
-                } else {
-                    AdbClient.shell(target.device.host, target.device.port, cmd)
+                when (target) {
+                    is Target.Local -> RootShell.execute(cmd)
+                    is Target.Remote ->
+                        AdbClient.shell(target.device.host, target.device.port, cmd)
+                    is Target.Usb -> {
+                        val d = AdbUsb.deviceByName(context, target.info.deviceName)
+                        if (d == null) {
+                            ShellResult("Dispositivo USB desconectado.", null, false, true, false)
+                        } else {
+                            AdbClient.shellUsb(d, cmd)
+                        }
+                    }
                 }
             }
             val idx = history.indexOfFirst { it.id == entry.id }
@@ -266,12 +335,24 @@ fun TerminalScreen() {
                     onClick = { tab = 1 },
                     text = { Text("Dispositivos") }
                 )
+                Tab(
+                    selected = tab == 2,
+                    onClick = { tab = 2 },
+                    text = { Text("Sideload") }
+                )
             }
-            if (tab == 0) {
-                TerminalTab(
+            when (tab) {
+                0 -> TerminalTab(
                     selected = selected,
                     onSelect = { selected = it },
                     devices = devices,
+                    usbDevices = usbDevices,
+                    usbStatus = usbStatus,
+                    onSelectUsb = { info ->
+                        val d = AdbUsb.deviceByName(context, info.deviceName)
+                            ?: return@TerminalTab
+                        selected = Target.Usb(info, d)
+                    },
                     onAddDevice = { tab = 1 },
                     input = input,
                     onInput = { input = it },
@@ -285,16 +366,30 @@ fun TerminalScreen() {
                     onCopy = { copyAll() },
                     rootDenied = selected is Target.Local && rootState == RootState.DENIED
                 )
-            } else {
-                DevicesTab(
+                1 -> DevicesTab(
                     devices = devices,
+                    usbDevices = usbDevices,
+                    usbStatus = usbStatus,
+                    usbModels = usbModels,
                     onAdd = { addDevice(it) },
                     onRemove = { removeDevice(it) },
                     onTest = { probe(it) },
                     onOpenTerminal = { device ->
                         selected = Target.Remote(device)
                         tab = 0
+                    },
+                    onTestUsb = { probeUsb(it) },
+                    onPermissionUsb = { requestUsbPermission(it) },
+                    onOpenUsbTerminal = { info ->
+                        val d = AdbUsb.deviceByName(context, info.deviceName) ?: return@DevicesTab
+                        selected = Target.Usb(info, d)
+                        tab = 0
                     }
+                )
+                else -> SideloadTab(
+                    usbDevices = usbDevices,
+                    usbStatus = usbStatus,
+                    networkDevices = devices
                 )
             }
         }

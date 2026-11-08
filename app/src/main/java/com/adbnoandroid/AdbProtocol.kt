@@ -9,11 +9,14 @@ import java.nio.ByteOrder
 
 /**
  * Implementação do protocolo ADB no lado HOST/CLIENT — a mesma conversa de
- * pacotes que o `adb` do PC faz com o `adbd` do aparelho remoto (por TCP):
+ * pacotes que o `adb` do PC (platform-tools) faz com o `adbd` do aparelho.
  *
- *   CNXN (banner) -> [AUTH (token -> assinatura RSA -> chave pública)]
- *   OPEN (serviço, ex.: "shell:comando") -> OKAY
- *   WRTE (dados) + OKAY (ack) ... CLSE / CLSE
+ * O protocolo é o mesmo independentemente do transporte:
+ *   - **USB (cabo/OTG)**: endpoints bulk do interface ADB (class 0xFF, sub 0x42)
+ *   - **TCP (Wi‑Fi)**: socket na porta 5555 ou na porta de depuração sem fio
+ *
+ * Fluxo: CNXN (banner) -> [AUTH (token -> assinatura RSA -> chave pública)]
+ *       -> OPEN (serviço) -> OKAY -> WRTE/OKAY … -> CLSE/CLSE
  *
  * Cada pacote: 24 bytes little-endian
  * (comando, arg0, arg1, data_length, data_checksum, magic) + dados.
@@ -38,6 +41,11 @@ object Adb {
     const val AUTH_RSAPUBLICKEY = 3
 
     const val EXIT_MARKER = "__ADBNOANDROID_EXIT__"
+
+    // Interface USB do ADB (a mesma que o adb do PC procura)
+    const val USB_CLASS = 0xFF
+    const val USB_SUBCLASS = 0x42
+    const val USB_PROTOCOL = 0x01
 
     /** Soma de todos os bytes (o checksum do protocolo ADB). */
     fun checksum(data: ByteArray): Int {
@@ -93,25 +101,31 @@ class AdbAuthException(message: String) : AdbException(message)
 class AdbServiceException(message: String) : AdbException(message)
 
 /**
- * Conexão TCP com o `adbd` de um aparelho remoto (porta 5555 por padrão,
- * ou a porta mostrada em "Depuração sem fio" no Android 11+).
- *
- * Uso típico: `connect()` -> `openShell(command)` -> fecha.
- * Uma conexão nova por comando é o mais simples e confiável (a chave RSA
- * fica autorizada no aparelho depois da primeira aprovação).
+ * Transporte de bytes entre o app e o adbd (USB bulk ou TCP).
+ * Implementações: [TcpTransport] e [UsbTransport].
  */
-class AdbConnection(
+interface AdbTransport {
+    fun write(data: ByteArray)
+
+    /** Lê exatamente n bytes (lança exceção em fim de conexão/erro/timeout). */
+    fun readFull(n: Int): ByteArray
+
+    fun setTimeout(ms: Int)
+
+    fun close()
+}
+
+/** Transporte TCP: conexão direta no adbd do aparelho (Wi‑Fi). */
+class TcpTransport(
     val host: String,
     val port: Int,
-    private val auth: AdbAuth? = null,
     private val connectTimeoutMs: Int = 5000
-) {
+) : AdbTransport {
     private var socket: Socket? = null
     private var out: DataOutputStream? = null
     private var input: DataInputStream? = null
 
-    /** Abre o TCP, troca o banner (CNXN) e autentica se o aparelho pedir. */
-    fun connect(): String {
+    init {
         val s = Socket()
         try {
             s.connect(InetSocketAddress(host, port), connectTimeoutMs)
@@ -127,11 +141,64 @@ class AdbConnection(
         socket = s
         out = DataOutputStream(s.getOutputStream())
         input = DataInputStream(s.getInputStream())
+    }
 
+    override fun write(data: ByteArray) {
+        val o = out ?: throw AdbException("Conexão não aberta.")
+        o.write(data)
+        o.flush()
+    }
+
+    override fun readFull(n: Int): ByteArray {
+        val i = input ?: throw AdbException("Conexão não aberta.")
+        val buf = ByteArray(n)
+        var off = 0
+        while (off < n) {
+            val r = i.read(buf, off, n - off)
+            if (r == -1) throw AdbConnectException("O aparelho fechou a conexão.")
+            off += r
+        }
+        return buf
+    }
+
+    override fun setTimeout(ms: Int) {
+        try {
+            socket?.soTimeout = ms
+        } catch (_: Exception) {
+        }
+    }
+
+    override fun close() {
+        try {
+            socket?.close()
+        } catch (_: Exception) {
+        }
+        socket = null
+    }
+}
+
+/**
+ * Conexão lógica com o adbd (banner + auth + serviços) sobre qualquer
+ * [AdbTransport] (USB ou TCP).
+ *
+ * Uso: `connect()` -> `openService("shell:…")` -> `readUntilClose(id)` -> fecha.
+ * Uma conexão nova por comando é o mais simples e confiável (a chave RSA
+ * fica autorizada no aparelho depois da primeira aprovação).
+ */
+class AdbConnection(
+    private val transport: AdbTransport,
+    private val auth: AdbAuth? = null
+) {
+    /** Banner do aparelho após o handshake (ex.: "device:…:produto:…"). */
+    var banner: String? = null
+        private set
+
+    /** Troca o banner (CNXN) e autentica se o aparelho pedir. Devolve o banner. */
+    fun connect(): String {
         // Banner do host (o adbd só exige o prefixo "host:").
         send(Adb.CNXN, Adb.VERSION, Adb.MAX_DATA, "host::adb_no_android\0".toByteArray(Charsets.UTF_8))
         var packet = readPacket()
-        if (packet.command == Adb.CNXN) return stripNul(packet)
+        if (packet.command == Adb.CNXN) return finish(stripNul(packet))
 
         if (packet.command != Adb.AUTH) {
             close()
@@ -156,7 +223,7 @@ class AdbConnection(
             val signature = auth.sign(packet.data)
             send(Adb.AUTH, Adb.AUTH_SIGNATURE, 0, signature)
             packet = readPacket()
-            if (packet.command == Adb.CNXN) return stripNul(packet)
+            if (packet.command == Adb.CNXN) return finish(stripNul(packet))
             if (packet.command != Adb.AUTH) {
                 close()
                 throw AdbServiceException("Falha na autenticação (${packet.name}).")
@@ -164,10 +231,10 @@ class AdbConnection(
             // O aparelho rejeitou a chave: envia a chave pública e espera o
             // usuário tocar "Permitir" no diálogo do aparelho.
             send(Adb.AUTH, Adb.AUTH_RSAPUBLICKEY, 0, (auth.publicKeyPem() + "\0").toByteArray(Charsets.UTF_8))
-            s.soTimeout = 120_000
+            transport.setTimeout(120_000)
             packet = readPacket()
-            s.soTimeout = 30_000
-            if (packet.command == Adb.CNXN) return stripNul(packet)
+            transport.setTimeout(30_000)
+            if (packet.command == Adb.CNXN) return finish(stripNul(packet))
             close()
             throw AdbAuthException(
                 "Autenticação não aceita pelo aparelho. Toque em \"Permitir\" no diálogo " +
@@ -178,23 +245,18 @@ class AdbConnection(
 
     /** Abre um serviço (ex.: "shell:comando"). Retorna o id remoto da conexão. */
     fun openService(destination: String): Int {
-        val packet = openServiceRaw(destination)
+        send(Adb.OPEN, LOCAL_ID, 0, (destination + "\0").toByteArray(Charsets.UTF_8))
+        val packet = readPacket()
         if (packet.command == Adb.CLSE) {
-            throw AdbServiceException("O aparelho não oferece o serviço \"$destination\".")
+            throw AdbServiceException(
+                "O aparelho não oferece o serviço \"$destination\". " +
+                    "Para sideload, ele precisa estar em RECOVERY com \"Apply update from ADB\"."
+            )
         }
         if (packet.command != Adb.OKAY) {
             throw AdbServiceException("Resposta inesperada ao abrir o serviço (${packet.name}).")
         }
         return packet.arg0
-    }
-
-    private fun openServiceRaw(destination: String): AdbPacket {
-        send(Adb.OPEN, LOCAL_ID, 0, (destination + "\0").toByteArray(Charsets.UTF_8))
-        val packet = readPacket()
-        if (packet.arg1 != LOCAL_ID && packet.arg1 != 0) {
-            throw AdbServiceException("OPEN endereçado a outro id (${packet.arg1}).")
-        }
-        return packet
     }
 
     /** Lê WRTE (com ack) até o CLSE e devolve a saída completa do serviço. */
@@ -208,7 +270,7 @@ class AdbConnection(
                     sb.append(packet.data.toString(Charsets.UTF_8))
                 }
                 Adb.CLSE -> {
-                    send(Adb.CLSE, LOCAL_ID, remoteId)
+                    closeService(remoteId)
                     return sb.toString()
                 }
                 else -> throw AdbServiceException("Pacote inesperado durante a leitura (${packet.name}).")
@@ -216,26 +278,51 @@ class AdbConnection(
         }
     }
 
+    /** Fecha o serviço (CLSE) sem fechar o transporte. */
+    fun closeService(remoteId: Int) {
+        send(Adb.CLSE, LOCAL_ID, remoteId)
+    }
+
+    // ---------------- I/O cru (protocolo file-sync: sideload) ----------------
+
+    fun writeRaw(data: ByteArray) {
+        transport.write(data)
+    }
+
+    fun readRaw(n: Int): ByteArray = transport.readFull(n)
+
+    /**
+     * Lê um frame file-sync. `OKAY`/`FAIL` vêm sozinhos (4 bytes, sem payload);
+     * os demais comandos (DATA, DONE, BEGIN…) têm payload terminado em NUL.
+     */
+    fun readSyncFrame(): String {
+        val header = transport.readFull(4)
+        val cmd = String(header, Charsets.US_ASCII)
+        if (cmd == "OKAY" || cmd == "FAIL") return cmd
+        val payload = StringBuilder()
+        while (true) {
+            val b = transport.readFull(1)[0]
+            if (b == 0.toByte()) break
+            payload.append(b.toInt().toChar())
+            if (payload.length > 512) {
+                throw AdbServiceException("Frame file-sync grande demais (comando $cmd).")
+            }
+        }
+        return cmd + payload.toString()
+    }
+
     /** Timeout de leitura (ms) para esperar a resposta do aparelho. */
     fun setTimeout(ms: Int) {
-        try {
-            socket?.soTimeout = ms
-        } catch (_: Exception) {
-        }
+        transport.setTimeout(ms)
     }
 
     fun close() {
-        try {
-            socket?.close()
-        } catch (_: Exception) {
-        }
-        socket = null
+        transport.close()
     }
 
-    // ---------------- transporte ----------------
+    // ---------------- pacotes ----------------
 
     private fun send(command: Int, arg0: Int, arg1: Int, data: ByteArray) {
-        val o = out ?: throw AdbException("Conexão não aberta.")
         val header = ByteBuffer.allocate(24).order(ByteOrder.LITTLE_ENDIAN)
         header.putInt(command)
         header.putInt(arg0)
@@ -243,14 +330,12 @@ class AdbConnection(
         header.putInt(data.size)
         header.putInt(Adb.checksum(data))
         header.putInt(command xor -1)
-        o.write(header.array())
-        if (data.isNotEmpty()) o.write(data)
-        o.flush()
+        transport.write(header.array())
+        if (data.isNotEmpty()) transport.write(data)
     }
 
     private fun readPacket(): AdbPacket {
-        val i = input ?: throw AdbException("Conexão não aberta.")
-        val header = readFull(24)
+        val header = transport.readFull(24)
         val bb = ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN)
         val command = bb.int
         val arg0 = bb.int
@@ -264,27 +349,20 @@ class AdbConnection(
         if (dataLength < 0 || dataLength > Adb.MAX_DATA) {
             throw AdbServiceException("Pacote com tamanho inválido: $dataLength")
         }
-        val data = if (dataLength > 0) readFull(dataLength) else ByteArray(0)
+        val data = if (dataLength > 0) transport.readFull(dataLength) else ByteArray(0)
         if (dataLength > 0 && Adb.checksum(data) != dataChecksum) {
             throw AdbServiceException("Checksum inválido no pacote ${Adb.nameOf(command)}.")
         }
         return AdbPacket(command, arg0, arg1, data)
     }
 
-    private fun readFull(n: Int): ByteArray {
-        val i = input ?: throw AdbException("Conexão não aberta.")
-        val buf = ByteArray(n)
-        var off = 0
-        while (off < n) {
-            val r = i.read(buf, off, n - off)
-            if (r == -1) throw AdbConnectException("O aparelho fechou a conexão.")
-            off += r
-        }
-        return buf
-    }
-
     private fun stripNul(packet: AdbPacket): String =
         packet.data.toString(Charsets.UTF_8).removeSuffix("\u0000")
+
+    private fun finish(bannerStr: String): String {
+        banner = bannerStr
+        return bannerStr
+    }
 
     companion object {
         /** Id local usado pelo host para a conexão de serviço. */
