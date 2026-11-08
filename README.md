@@ -6,6 +6,23 @@ Sem PC: o app **implementa o protocolo ADB inteiro em Kotlin** (a mesma conversa
 
 ---
 
+## 📥 Baixar o APK (testar no celular)
+
+O APK de teste (debug) é gerado automaticamente no **GitHub Actions** e publicado em
+[GitHub Releases](https://github.com/juliarleal55-stack/Adb-no-Android-/releases).
+
+**Download direto:** [app-debug.apk](https://github.com/juliarleal55-stack/Adb-no-Android-/releases/download/v1.0/app-debug.apk)
+
+Para instalar no celular:
+1. Baixe o `app-debug.apk` (no celular ou no PC e envie para o celular).
+2. Toque no arquivo e permita **“Instalar apps de fontes desconhecidas”**.
+3. Pronto — abra o **ADB no Android** e teste (terminal, USB/OTG, Wi‑Fi, logs e sideload).
+
+> O app pede permissões em uso: rede (Wi‑Fi), `usb.host` (cabo/OTG) e, para o modo
+> local, o `root` (`su`) do próprio aparelho.
+
+---
+
 ## ✨ O que o app faz
 
 ### 🔌 USB (cabo/OTG) — o "adb devices" por cabo
