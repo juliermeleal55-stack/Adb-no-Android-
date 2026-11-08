@@ -18,7 +18,7 @@ jobs:
           distribution: temurin
           java-version: "17"
       - name: setup android
-        uses: actions/setup-android@v3
+        uses: actions/setup-android@v2
       - name: use secret env + echo
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
