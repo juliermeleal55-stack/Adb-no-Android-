@@ -19,8 +19,8 @@ subiu à mão. O que o build produziu, medido no próprio runner:
 
 | Item | Valor |
 |---|---|
-| Arquivo | `app-debug.apk` · **9,2 MB** (9.167.228 bytes) |
-| SHA-256 | `12c9dcf10fe37603911660b11db36dc986cb9fba5581ef7d1b6eda0ecd444bdd` |
+| Arquivo | `app-debug.apk` · **~9,2 MB** |
+| SHA-256 | veja o laudo do build mais recente (link abaixo) |
 | Pacote | `com.adbnoandroid.debug` |
 | Versão | 2.0 (versionCode 2) |
 | minSdk / targetSdk | **24** (Android 7.0) / 34 |
