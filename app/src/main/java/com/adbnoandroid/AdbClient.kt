@@ -821,6 +821,39 @@ object AdbClient {
      * faria nada. O efeito útil equivalente é forçar uma conexão nova, que é o
      * que fazemos aqui.
      */
+    fun root(target: DeviceTarget): ShellResult = using(target) { conn ->
+        val remoteId = try {
+            conn.openService("root:")
+        } catch (e: AdbException) {
+            return@using ShellResult(e.message ?: "Falha", null, failed = true)
+        }
+        val text = conn.readUntilClose(remoteId)
+        val lower = text.lowercase()
+        val ok = lower.contains("restarting adbd as root") ||
+            lower.contains("adbd is already running as root") ||
+            lower.contains("restarting in")
+        ShellResult(text.trim(), if (ok) 0 else 1, failed = !ok)
+    }
+
+    /** `adb unroot`. */
+    fun unroot(target: DeviceTarget): ShellResult = using(target) { conn ->
+        val remoteId = conn.openService("unroot:")
+        ShellResult(conn.readUntilClose(remoteId).trim(), 0)
+    }
+
+    /** `adb remount` (precisa de root; AVB/verity pode bloquear). */
+    fun remount(target: DeviceTarget): ShellResult = using(target) { conn ->
+        val remoteId = try {
+            conn.openService("remount:")
+        } catch (e: AdbException) {
+            return@using ShellResult(e.message ?: "Falha", null, failed = true)
+        }
+        val text = conn.readUntilClose(remoteId)
+        val lower = text.lowercase()
+        val ok = lower.contains("remount succeeded") || lower.contains("succeeded")
+        ShellResult(text.trim(), if (ok) 0 else 1, failed = !ok)
+    }
+
     /** `adb usb` — volta o adbd para USB. */
     fun usbMode(target: DeviceTarget): ShellResult = using(target) { conn ->
         val remoteId = conn.openService("usb:")
