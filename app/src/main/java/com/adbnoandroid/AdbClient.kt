@@ -585,7 +585,6 @@ object AdbClient {
         try {
             // 1) streaming install
             onProgress("Instalando por streaming…", 0.02f)
-            var sent = 0L
             val sink = StdSource(
                 size = size,
                 reader = run {
@@ -609,7 +608,6 @@ object AdbClient {
                     }
                 },
                 onProgress = { uploaded ->
-                    sent = uploaded
                     onProgress(
                         "Enviando o APK… ${percent(uploaded, size)}%",
                         0.02f + 0.9f * (uploaded.toFloat() / maxOf(1L, size))

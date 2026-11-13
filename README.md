@@ -10,6 +10,37 @@ interface USB do aparelho, autentica com chave RSA (o conhecido diálogo
 
 ---
 
+## ⬇️ Baixar o APK
+
+**[📦 Baixar o APK (v2.0)](https://github.com/juliermeleal55-stack/Adb-no-Android-/releases/latest)**
+
+O APK é compilado pelo GitHub Actions a cada push — não é um arquivo que alguém
+subiu à mão. O que o build produziu, medido no próprio runner:
+
+| Item | Valor |
+|---|---|
+| Arquivo | `app-debug.apk` · **9,2 MB** (9.167.316 bytes) |
+| SHA-256 | `eba274a1561b971244f78cd1700d72294772230d6d36f009db3b62e0e104b362` |
+| Pacote | `com.adbnoandroid.debug` |
+| Versão | 2.0 (versionCode 2) |
+| minSdk / targetSdk | **24** (Android 7.0) / 34 |
+| Assinatura | `CN=Android Debug` — assinado, instala |
+| DEX | 4 arquivos · 12.968 classes |
+
+> ⚠️ **É um APK de debug**, assinado com a chave de debug do Android. Serve para
+> instalar e testar; para publicar na Play Store é preciso gerar um build de
+> release com sua própria keystore. O `minSdk` é **24**, não 23.
+
+O laudo completo de cada build (badging, assinatura, dependências empacotadas no
+DEX) fica na branch [`ci-report`](https://github.com/juliermeleal55-stack/Adb-no-Android-/tree/ci-report)
+em `.ci-logs/APK.md`; o log de build fica em `ci-build-log` quando falha.
+
+**Instalar:** baixe no celular → abra o arquivo → permita "instalar de fontes
+desconhecidas" para o navegador/gerenciador de arquivos. Por cabo: ative a
+depuração USB no **outro** aparelho e conecte o cabo OTG.
+
+---
+
 ## ✨ O que o app faz
 
 ### 🔌 Dispositivos (`adb devices`)
