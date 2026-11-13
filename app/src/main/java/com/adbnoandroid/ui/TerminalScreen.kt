@@ -95,7 +95,6 @@ fun TerminalScreen(state: AppState) {
     var input by remember { mutableStateOf("") }
     var running by remember { mutableStateOf(false) }
     var currentCommand by remember { mutableStateOf("") }
-    var streamBuffer by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("Dispositivo") }
     var historyIndex by remember { mutableStateOf(-1) }
     var showSuggestions by remember { mutableStateOf(false) }

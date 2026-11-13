@@ -121,7 +121,7 @@ object AdbShell {
         var stderr = collectedErr.toString().trimEnd()
         if (close != null && close.message != null) {
             if (output.isBlank()) {
-                output = close.message ?: ""
+                output = close.message
             } else {
                 stderr = listOf(stderr, close.message).filter { it.isNotBlank() }
                     .joinToString("\n")

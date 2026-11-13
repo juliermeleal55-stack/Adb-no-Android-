@@ -172,7 +172,6 @@ private fun TopBar(
     onThemeChange: (ThemeMode) -> Unit,
     onScreenChange: (Screen) -> Unit
 ) {
-    val c = LocalAdbColors.current
     var themeMenu by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
 

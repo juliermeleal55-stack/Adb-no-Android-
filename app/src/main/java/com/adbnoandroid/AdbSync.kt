@@ -435,11 +435,9 @@ object AdbFiles {
             withSync(connection) { ch ->
                 ch.request(SyncCommands.LIST_V2, path)
                 val out = ArrayList<RemoteEntry>()
-                var gotAny = false
                 while (true) {
                     when (val frame = ch.readFrame()) {
                         is SyncFrame.Dent -> {
-                            gotAny = true
                             out.add(frame.entry)
                         }
                         is SyncFrame.Done -> return@withSync out

@@ -93,7 +93,6 @@ fun DevicesScreen(state: AppState) {
         // ------------------------------------------------ dashboard
         item {
             val snapshot = state.selectedSnapshot()
-            val target = state.selectedTarget
             if (snapshot != null && snapshot.online) {
                 DashboardCard(state, snapshot)
             } else {
@@ -455,7 +454,6 @@ private fun UsbDeviceCard(
     val status = state.statusOf(DeviceTarget.Usb(info))
     val snapshot = state.snapshotOf(DeviceTarget.Usb(info))
     val selected = state.selectedTarget?.key() == DeviceTarget.Usb(info).key()
-    val c = LocalAdbColors.current
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = if (selected) {

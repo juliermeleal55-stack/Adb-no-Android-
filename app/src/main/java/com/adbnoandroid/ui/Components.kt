@@ -51,6 +51,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -251,7 +252,9 @@ fun ConsoleView(
                         annotated,
                         fontFamily = c.mono,
                         fontSize = 12.sp,
-                        lineHeight = 17.sp
+                        lineHeight = 17.sp,
+                        maxLines = maxLines,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
