@@ -240,7 +240,9 @@ fun HomeScreen(state: AppState, darkTheme: Boolean, onToggleTheme: () -> Unit) {
                     }
                 },
                 actions = {
-                    StatusChip(state.statusOf(state.selectedTarget))
+                    StatusChip(
+                        state.selectedTarget?.let { state.statusOf(it) } ?: DeviceStatus.UNKNOWN
+                    )
                     Spacer(Modifier.width(4.dp))
                     IconButton(onClick = onToggleTheme) {
                         Text(if (darkTheme) "☀" else "☾", fontSize = 18.sp)
@@ -436,7 +438,7 @@ private data class Confirm(
 @Composable
 private fun DeviceBlock(state: AppState, onRefresh: () -> Unit) {
     val snapshot = state.selectedSnapshot()
-    val status = state.statusOf(state.selectedTarget)
+    val status = state.selectedTarget?.let { state.statusOf(it) } ?: DeviceStatus.UNKNOWN
     val usb = state.usbDevices
     val fastboot = state.fastbootDevices
 
@@ -559,7 +561,16 @@ private fun DeviceBlock(state: AppState, onRefresh: () -> Unit) {
                 Spacer(Modifier.height(10.dp))
                 val ctx = LocalContext.current
                 Button(
-                    onClick = { AdbUsb.requestPermission(ctx, pendingPermission.device) },
+                    // A permissão é pedida ao UsbDevice do sistema, encontrado
+                    // pelo nome — UsbDeviceInfo é só o que guardamos na lista.
+                    onClick = {
+                        val device = AdbUsb.deviceByName(ctx, pendingPermission.deviceName)
+                        if (device != null) {
+                            AdbUsb.requestPermission(ctx, device)
+                        } else {
+                            onRefresh()
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 ) {

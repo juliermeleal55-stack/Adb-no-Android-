@@ -1,4 +1,4 @@
-package com.adbnoandroid
+package com.adbnoandroid.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
