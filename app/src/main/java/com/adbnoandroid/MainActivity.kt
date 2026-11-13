@@ -4,8 +4,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -14,14 +19,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.adbnoandroid.ui.AdbTheme
+import com.adbnoandroid.ui.FilesScreen
 import com.adbnoandroid.ui.HomeScreen
+import com.adbnoandroid.ui.SettingsScreen
+import com.adbnoandroid.ui.ThemeChoice
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -31,14 +42,21 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         AdbClient.init(this)
         setContent {
-            // Material You: segue o tema do sistema; o botão do topo inverte.
+            // Material You: SYSTEM segue o aparelho; claro/escuro forçam.
             val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
-            var darkOverride by remember { mutableStateOf<Boolean?>(null) }
-            val dark = darkOverride ?: systemDark
+            var themeChoice by rememberSaveable {
+                mutableStateOf(ThemeChoice.SYSTEM)
+            }
+            val dark = when (themeChoice) {
+                ThemeChoice.SYSTEM -> systemDark
+                ThemeChoice.LIGHT -> false
+                ThemeChoice.DARK -> true
+            }
             AdbTheme(darkTheme = dark) {
                 AdbApp(
-                    darkTheme = dark,
-                    onToggleTheme = { darkOverride = !dark }
+                    themeChoice = themeChoice,
+                    onThemeChoice = { themeChoice = it },
+                    darkTheme = dark
                 )
             }
         }
@@ -47,15 +65,24 @@ class MainActivity : ComponentActivity() {
 
 
 
+/** As três telas do app, na ordem da barra de baixo. */
+enum class AppTab(val label: String, val icon: String) {
+    CMD("CMD", "⌨"),
+    FILES("Arquivos", "📁"),
+    SETTINGS("Config", "⚙")
+}
+
 @Composable
 fun AdbApp(
-    darkTheme: Boolean,
-    onToggleTheme: () -> Unit
+    themeChoice: ThemeChoice,
+    onThemeChoice: (ThemeChoice) -> Unit,
+    darkTheme: Boolean
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val state = remember { AppState(context, scope) }
     var serverStarted by remember { mutableStateOf(false) }
+    var tab by remember { mutableStateOf(AppTab.CMD) }
 
     // Eventos USB (plugue/remoção/permissão) → re-lista dispositivos.
     LaunchedEffect(Unit) {
@@ -96,14 +123,44 @@ fun AdbApp(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
-        HomeScreen(
-            state = state,
-            darkTheme = darkTheme,
-            onToggleTheme = onToggleTheme
-        )
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = {
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surface,
+                tonalElevation = 0.dp
+            ) {
+                AppTab.entries.forEach { item ->
+                    NavigationBarItem(
+                        selected = tab == item,
+                        onClick = { tab = item },
+                        icon = { Text(item.icon, fontSize = 17.sp) },
+                        label = { Text(item.label, fontSize = 10.sp) }
+                    )
+                }
+            }
+        }
+        ) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding)) {
+            when (tab) {
+                AppTab.CMD -> HomeScreen(
+                    state = state,
+                    darkTheme = darkTheme,
+                    // O botão do topo também muda a escolha das Configurações,
+                    // para as duas telas nunca discordarem.
+                    onToggleTheme = {
+                        onThemeChoice(
+                            if (darkTheme) ThemeChoice.LIGHT else ThemeChoice.DARK
+                        )
+                    }
+                )
+                AppTab.FILES -> FilesScreen(state)
+                AppTab.SETTINGS -> SettingsScreen(
+                    themeChoice = themeChoice,
+                    onThemeChoice = onThemeChoice,
+                    darkTheme = darkTheme
+                )
+            }
+        }
     }
 }
