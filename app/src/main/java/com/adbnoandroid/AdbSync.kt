@@ -48,19 +48,19 @@ object SyncCommands {
     const val MODE_DIR = 16877 // 040755
 
     /** Moldura do protocolo sync: id (4) + length (4). */
-    const val SyncCommands.FRAME_HEADER = 8
+    const val FRAME_HEADER = 8
 
     /** `sync_stat_v1` (packed): id, mode, size, mtime. */
-    const val SyncCommands.STAT_V1_SIZE = 16
+    const val STAT_V1_SIZE = 16
 
     /** `sync_stat_v2` (packed): 72 bytes. */
-    const val SyncCommands.STAT_V2_SIZE = 72
+    const val STAT_V2_SIZE = 72
 
     /** Tamanho do cabeçalho `sync_dent_v1` (packed): 5 × uint32. */
-    const val SyncCommands.DENT_V1_SIZE = 20
+    const val DENT_V1_SIZE = 20
 
     /** Tamanho do cabeçalho `sync_dent_v2` (packed): 76 bytes. */
-    const val SyncCommands.DENT_V2_SIZE = 76
+    const val DENT_V2_SIZE = 76
 }
 
 /** Falha ao interpretar o fluxo do serviço sync. */

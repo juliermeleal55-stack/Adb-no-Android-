@@ -60,7 +60,9 @@ class StdSource(
 class ShellStreamCallbacks(
     val onStdout: (String) -> Unit,
     val onStderr: (String) -> Unit = {},
-    val onExit: (Int?) -> Unit = {}
+    val onExit: (Int?) -> Unit = {},
+    /** Falha de transporte/protocolo que encerrou o stream (cabo, timeout…). */
+    val onError: (String) -> Unit = {}
 )
 
 /** Aviso de encerramento da sessão (timeout, queda, erro de protocolo). */
