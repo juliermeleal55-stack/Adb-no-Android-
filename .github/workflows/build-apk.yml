@@ -149,6 +149,28 @@ jobs:
             done
             echo '```'
             echo
+            echo "## Teste decisivo: classes essenciais empacotadas?"
+            echo "Se Compose/AndroidX nao estiverem no APK, o app abre e fecha com"
+            echo "ClassNotFoundException — o DEX teria so o codigo do app."
+            echo '```'
+            unzip -p "$APK" 'classes*.dex' > /tmp/all.dex
+            for cls in \
+              "Lcom/adbnoandroid/MainActivity;" \
+              "Lcom/adbnoandroid/AdbClient;" \
+              "Landroidx/compose/runtime/Composer;" \
+              "Landroidx/compose/ui/platform/AndroidComposeView;" \
+              "Landroidx/compose/material3/MaterialTheme;" \
+              "Landroidx/activity/ComponentActivity;" \
+              "Lkotlinx/coroutines/CoroutineScope;" \
+              "Landroidx/core/app/NotificationCompat;"; do
+              if strings /tmp/all.dex | grep -qxF "$cls"; then
+                echo "OK     $cls"
+              else
+                echo "FALTA  $cls"
+              fi
+            done
+            echo '```'
+            echo
             echo "## Avisos do compilador"
             echo '```'
             grep -E "^w: .*(adbnoandroid)" build_output.log | head -20
