@@ -216,7 +216,6 @@ fun HomeScreen(state: AppState, darkTheme: Boolean, onToggleTheme: () -> Unit) {
     }
 
     val snapshot = state.selectedSnapshot()
-    val connected = state.usbDevices.isNotEmpty() || state.fastbootDevices.isNotEmpty()
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,

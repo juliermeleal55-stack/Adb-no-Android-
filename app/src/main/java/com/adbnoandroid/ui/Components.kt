@@ -150,28 +150,3 @@ fun ConfirmDangerDialog(
         shape = RoundedCornerShape(24.dp)
     )
 }
-
-/** Linha de detalhe usada em blocos de informação. */
-@Composable
-fun InfoRow(label: String, value: String, mono: Boolean = false) {
-    if (value.isBlank()) return
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.width(12.dp))
-        Text(
-            value,
-            style = MaterialTheme.typography.bodySmall,
-            maxLines = 2,
-            textAlign = androidx.compose.ui.text.style.TextAlign.End
-        )
-    }
-}
