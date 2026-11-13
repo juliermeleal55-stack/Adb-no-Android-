@@ -84,7 +84,8 @@ fun AppScaffold(
                     state = state,
                     screen = screen,
                     themeMode = themeMode,
-                    onThemeChange = onThemeChange
+                    onThemeChange = onThemeChange,
+                    onScreenChange = onScreenChange
                 )
             }
         },
@@ -168,7 +169,8 @@ private fun TopBar(
     state: AppState,
     screen: Screen,
     themeMode: ThemeMode,
-    onThemeChange: (ThemeMode) -> Unit
+    onThemeChange: (ThemeMode) -> Unit,
+    onScreenChange: (Screen) -> Unit
 ) {
     val c = LocalAdbColors.current
     var themeMenu by remember { mutableStateOf(false) }

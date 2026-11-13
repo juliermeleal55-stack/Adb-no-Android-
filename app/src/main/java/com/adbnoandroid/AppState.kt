@@ -294,6 +294,35 @@ class AppState(
 
     // ------------------------------------------------------------- Wi‑Fi
 
+    /**
+     * Interpreta `IP:porta` (ex.: `192.168.0.10:5555`, `[::1]:5555`).
+     * Devolve `null` se o endereço não for utilizável — a UI mostra a dica
+     * de formato em vez de deixar o usuário tentar conectar num host inválido.
+     */
+    private fun parseAddress(raw: String): Pair<String, Int>? {
+        val text = raw.trim()
+        if (text.isEmpty()) return null
+        val host: String
+        val portText: String
+        if (text.startsWith("[")) {
+            // IPv6 literal: [::1]:5555
+            val close = text.indexOf(']')
+            if (close <= 1) return null
+            host = text.substring(1, close)
+            if (close + 1 >= text.length || text[close + 1] != ':') return null
+            portText = text.substring(close + 2)
+        } else {
+            val colon = text.lastIndexOf(':')
+            if (colon <= 0 || colon == text.length - 1) return null
+            host = text.substring(0, colon)
+            portText = text.substring(colon + 1)
+        }
+        if (host.isBlank()) return null
+        val port = portText.toIntOrNull() ?: return null
+        if (port !in 1..65535) return null
+        return host to port
+    }
+
     fun addNetworkDevice(raw: String): Pair<Boolean, String> {
         val parsed = parseAddress(raw)
             ?: return false to "Endereço inválido. Use IP:porta (ex.: 192.168.0.10:5555)."

@@ -48,19 +48,19 @@ object SyncCommands {
     const val MODE_DIR = 16877 // 040755
 
     /** Moldura do protocolo sync: id (4) + length (4). */
-    const val FRAME_HEADER = 8
+    const val SyncCommands.FRAME_HEADER = 8
 
     /** `sync_stat_v1` (packed): id, mode, size, mtime. */
-    const val STAT_V1_SIZE = 16
+    const val SyncCommands.STAT_V1_SIZE = 16
 
     /** `sync_stat_v2` (packed): 72 bytes. */
-    const val STAT_V2_SIZE = 72
+    const val SyncCommands.STAT_V2_SIZE = 72
 
     /** Tamanho do cabeçalho `sync_dent_v1` (packed): 5 × uint32. */
-    const val DENT_V1_SIZE = 20
+    const val SyncCommands.DENT_V1_SIZE = 20
 
     /** Tamanho do cabeçalho `sync_dent_v2` (packed): 76 bytes. */
-    const val DENT_V2_SIZE = 76
+    const val SyncCommands.DENT_V2_SIZE = 76
 }
 
 /** Falha ao interpretar o fluxo do serviço sync. */
@@ -245,19 +245,19 @@ class SyncChannel(
         }
 
         // DENT/DNT2: struct inteira + nome, também sem moldura.
-        if (command == SyncCommands.DENT || command == SyncCommands.DENT_V2) {
+        if (command == SyncCommands.DENT_V1 || command == SyncCommands.DENT_V2) {
             return readDent(command == SyncCommands.DENT_V2)
         }
 
         // Demais frames: id (4) + length (4) + length bytes.
-        while (len < FRAME_HEADER) fill()
+        while (len < SyncCommands.FRAME_HEADER) fill()
         val argLen = ByteBuffer.wrap(buf, 4, 4).order(ByteOrder.LITTLE_ENDIAN).int
         if (argLen < 0 || argLen > Adb.SYNC_DATA_MAX + 4096) {
             throw AdbServiceException("Pacote sync inválido (tamanho $argLen).")
         }
-        while (len < FRAME_HEADER + argLen) fill()
-        val payload = buf.copyOfRange(FRAME_HEADER, FRAME_HEADER + argLen)
-        consume(FRAME_HEADER + argLen)
+        while (len < SyncCommands.FRAME_HEADER + argLen) fill()
+        val payload = buf.copyOfRange(SyncCommands.FRAME_HEADER, SyncCommands.FRAME_HEADER + argLen)
+        consume(SyncCommands.FRAME_HEADER + argLen)
         return when (command) {
             SyncCommands.DATA -> SyncFrame.Data(payload)
             SyncCommands.DONE -> SyncFrame.Done
@@ -278,7 +278,7 @@ class SyncChannel(
 
     /** `sync_stat_v1` (16 bytes) ou `sync_stat_v2` (72 bytes), sem moldura. */
     private fun readStat(v2: Boolean): SyncFrame.Stat {
-        val statSize = if (v2) STAT_V2_SIZE else STAT_V1_SIZE
+        val statSize = if (v2) SyncCommands.STAT_V2_SIZE else SyncCommands.STAT_V1_SIZE
         while (len < statSize) fill()
         val bb = ByteBuffer.wrap(buf, 0, statSize).order(ByteOrder.LITTLE_ENDIAN)
         val mode: Int
@@ -315,7 +315,7 @@ class SyncChannel(
      * por isso lemos `namelen` da própria struct.
      */
     private fun readDent(v2: Boolean): SyncFrame {
-        val headerSize = if (v2) DENT_V2_SIZE else DENT_V1_SIZE
+        val headerSize = if (v2) SyncCommands.DENT_V2_SIZE else SyncCommands.DENT_V1_SIZE
         while (len < headerSize) fill()
         // A listagem termina com um DONE do tamanho da MESMA struct (o adbd faz
         // memset(&msg, 0, sizeof(msg)) e escreve sizeof(msg) bytes) — não com

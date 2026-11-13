@@ -525,16 +525,17 @@ private fun UsbDeviceCard(
                         onClick = onProbe,
                         shape = RoundedCornerShape(12.dp)
                     ) { Text("Verificar de novo") }
+                    // LocalContext.current so pode ser lido no corpo composable;
+                    // dentro do onClick (lambda comum) o Compose ja saiu do escopo.
+                    val permissionContext = androidx.compose.ui.platform.LocalContext.current
                     OutlinedButton(
                         onClick = {
                             val d = AdbUsb.deviceByName(
-                                androidx.compose.ui.platform.LocalContext.current,
+                                permissionContext,
                                 info.deviceName
                             )
                             if (d != null) {
-                                AdbUsb.requestPermission(
-                                    androidx.compose.ui.platform.LocalContext.current, d
-                                )
+                                AdbUsb.requestPermission(permissionContext, d)
                             }
                         },
                         shape = RoundedCornerShape(12.dp)

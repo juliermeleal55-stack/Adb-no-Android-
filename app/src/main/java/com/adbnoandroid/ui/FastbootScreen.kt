@@ -388,17 +388,17 @@ fun FastbootScreen(state: AppState) {
                     ) {
                         ActionButton("reboot", {
                             run("reboot") { dev ->
-                                AdbClient.fastbootSession(dev).use { it.reboot() }
+                                AdbClient.fastbootSession(dev).use { session -> session.reboot() }
                             }
                         }, enabled = connected && progress == null, primary = true)
                         ActionButton("reboot-bootloader", {
                             run("reboot-bootloader") { dev ->
-                                AdbClient.fastbootSession(dev).use { it.reboot("bootloader") }
+                                AdbClient.fastbootSession(dev).use { session -> session.reboot("bootloader") }
                             }
                         }, enabled = connected && progress == null)
                         ActionButton("reboot-recovery", {
                             run("reboot-recovery") { dev ->
-                                AdbClient.fastbootSession(dev).use { it.reboot("recovery") }
+                                AdbClient.fastbootSession(dev).use { session -> session.reboot("recovery") }
                             }
                         }, enabled = connected && progress == null)
                     }

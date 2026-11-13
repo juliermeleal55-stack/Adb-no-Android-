@@ -62,7 +62,7 @@ object FastbootUsb {
             for (i in 0 until config.interfaceCount) {
                 val itf = config.getInterface(i)
                 if (itf.interfaceClass == Fastboot.FB_CLASS &&
-                    itf.protocol != 0x01 // não é ADB
+                    itf.interfaceProtocol != 0x01 // não é ADB
                 ) {
                     val hasBulk = (0 until itf.endpointCount).any {
                         itf.getEndpoint(it).type == UsbConstants.USB_ENDPOINT_XFER_BULK
@@ -347,7 +347,7 @@ class FastbootTransport(
  * Sessão de alto nível do fastboot: conversa com o bootloader e transforma
  * respostas em resultados prontos para a UI.
  */
-class FastbootSession(private val transport: FastbootTransport) {
+class FastbootSession(private val transport: FastbootTransport) : java.io.Closeable {
 
     /**
      * Envia um comando e junta INFO/TEXT até OKAY/FAIL.
@@ -490,5 +490,5 @@ class FastbootSession(private val transport: FastbootTransport) {
         return if (slot.isBlank()) "" else "_$slot"
     }
 
-    fun close() = transport.close()
+    override fun close() = transport.close()
 }

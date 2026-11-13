@@ -1,6 +1,7 @@
 package com.adbnoandroid
 
 import android.content.Context
+import java.io.ByteArrayOutputStream
 import java.io.File
 
 /** Status de um dispositivo na lista. */

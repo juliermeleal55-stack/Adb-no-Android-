@@ -424,6 +424,8 @@ fun ToolsScreen(state: AppState) {
                         )
                     }, enabled = adbOk && busy == null)
                     ActionButton("Modo sideload", {
+                        // Mesmo cuidado dos outros: captura agora, sem `!!`.
+                        val device = target ?: return@ActionButton
                         runAction("reboot sideload") {
                             val res = AdbClient.rebootSideload(device)
                             true to res.combined().ifBlank { "Comando enviado." }
@@ -736,15 +738,22 @@ fun queryDisplayName(context: android.content.Context, uri: Uri): String? = try 
 }
 
 /** Copia o conteúdo do URI para o cache do app com o nome original. */
-fun copyToCache(context: android.content.Context, uri: Uri, name: String): File? = try {
-    val dir = File(context.cacheDir, "picked")
-    dir.mkdirs()
-    val safeName = FileSaver.cleanName(name)
-    val file = File(dir, safeName)
-    context.contentResolver.openInputStream(uri)?.use { ins ->
-        file.outputStream().use { outs -> ins.copyTo(outs, 128 * 1024) }
-    } ?: return null
-    file
-} catch (_: Exception) {
-    null
+fun copyToCache(context: android.content.Context, uri: Uri, name: String): File? {
+    return try {
+        val dir = File(context.cacheDir, "picked")
+        dir.mkdirs()
+        val safeName = FileSaver.cleanName(name)
+        val file = File(dir, safeName)
+        val stream = context.contentResolver.openInputStream(uri)
+        if (stream == null) {
+            null
+        } else {
+            stream.use { ins ->
+                file.outputStream().use { outs -> ins.copyTo(outs, 128 * 1024) }
+            }
+            file
+        }
+    } catch (_: Exception) {
+        null
+    }
 }

@@ -135,7 +135,8 @@ class AdbConnectException(message: String, cause: Throwable? = null) : AdbExcept
 class AdbAuthException(message: String) : AdbException(message)
 
 /** O aparelho respondeu FAIL/CLSE, ou o serviço não existe naquele modo. */
-class AdbServiceException(message: String) : AdbException(message)
+class AdbServiceException(message: String, cause: Throwable? = null) :
+    AdbException(message, cause)
 
 /** Timeout de leitura/escrita. */
 class AdbTimeoutException(message: String) : AdbException(message)
@@ -534,7 +535,7 @@ class AdbConnection(
         // arg0 == 0 só é aceito para "OPEN falhou"; para fechar normalmente
         // usamos o nosso id (quando conhecido).
         try {
-            send(Adb.CLSE, localId, remoteId)
+            send(Adb.CLSE, localId, remoteId, ByteArray(0))
         } catch (_: Exception) {
         }
     }
@@ -630,7 +631,7 @@ class AdbConnection(
                     // que nunca "trava" esperando contadores de janela.
                     // arg0 = nosso id local, arg1 = id do aparelho (o adbd
                     // descarta OKAY com arg0 == 0 quando o par é remote).
-                    send(Adb.OKAY, localIdOf(remoteId), remoteId)
+                    send(Adb.OKAY, localIdOf(remoteId), remoteId, ByteArray(0))
                     return packet.data
                 }
                 Adb.CLSE -> {
@@ -722,8 +723,9 @@ class AdbConnection(
         return AdbPacket(command, arg0, arg1, data)
     }
 
-    private fun stripNul(packet: AdbPacket): String =
-        packet.data.toString(Charsets.UTF_8).trimEnd('\u0000')
+    /** Texto de um payload sem o terminador NUL que o adbd acrescenta. */
+    private fun stripNul(data: ByteArray): String =
+        data.toString(Charsets.UTF_8).trimEnd('\u0000')
 
     companion object {
         const val ADB_AUTH_TIMEOUT_MS = 120_000

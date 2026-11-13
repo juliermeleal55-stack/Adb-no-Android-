@@ -64,7 +64,16 @@ class ShellStreamCallbacks(
 )
 
 /** Aviso de encerramento da sessão (timeout, queda, erro de protocolo). */
-class StreamClosed(val message: String?, val timedOut: Boolean = false)
+/**
+ * O stream do shell terminou de forma anormal (timeout, queda do cabo, serviço
+ * fechado). É uma **exceção de verdade** (`Throwable`) porque atravessa
+ * `catch (e: Exception)` em toda a camada de cima — antes era uma classe
+ * comum e nenhum `catch` conseguia pegá-la.
+ */
+class StreamClosed(
+    override val message: String?,
+    val timedOut: Boolean = false
+) : AdbException(message ?: "O stream do shell foi encerrado.")
 
 object AdbShell {
 
