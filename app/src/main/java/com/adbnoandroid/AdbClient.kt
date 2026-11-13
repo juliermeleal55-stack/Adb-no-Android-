@@ -83,10 +83,6 @@ sealed class DeviceTarget {
         override fun label(): String = "USB · " + info.label()
     }
 
-    data class Net(val info: AdbDeviceInfo) : DeviceTarget() {
-        override fun label(): String = "Wi-Fi · " + info.label()
-    }
-
     data class Fastboot(val info: FastbootDeviceInfo) : DeviceTarget() {
         override fun label(): String = "Fastboot · " + info.label()
     }
@@ -95,7 +91,6 @@ sealed class DeviceTarget {
 
     fun key(): String = when (this) {
         is Usb -> "usb:" + info.deviceName
-        is Net -> "net:" + info.address()
         is Fastboot -> "fb:" + info.deviceName
     }
 }
@@ -105,7 +100,7 @@ sealed class DeviceTarget {
  *
  * - Abre conexões ADB por **USB (OTG)** ou **Wi‑Fi**.
  * - Executa shell (v2 com streaming), push/pull, ls, install, reboot, root,
- *   remount, tcpip, sideload, logcat, bugreport, dumpsys…
+ *   remount, sideload, logcat, bugreport, dumpsys…
  * - Sessões fastboot (getvar, flash, erase, boot, reboot).
  *
  * Todas as funções são **bloqueantes**: chame em Dispatchers.IO.
@@ -139,7 +134,7 @@ object AdbClient {
     // ------------------------------------------------------------ conexões
 
     /**
-     * Abre uma conexão ADB para o alvo ([DeviceTarget.Usb] ou [DeviceTarget.Net]).
+     * Abre uma conexão ADB para o alvo USB (ou a sessão fastboot, que é outro protocolo).
      * A conexão volta já conectada (banner/auth feitos).
      */
     /**
@@ -165,7 +160,6 @@ object AdbClient {
 
     private fun deviceKey(target: DeviceTarget): String = when (target) {
         is DeviceTarget.Usb -> "usb:${target.info.deviceName}"
-        is DeviceTarget.Net -> "net:${target.info.address()}"
         is DeviceTarget.Fastboot -> "fb:${target.info.deviceName}"
     }
 
@@ -223,9 +217,6 @@ object AdbClient {
                     )
                 AdbUsb.open(ctx, device, auth)
             }
-            is DeviceTarget.Net -> AdbConnection(
-                TcpTransport(target.info.host, target.info.port), auth
-            ).also { it.connect() }
             is DeviceTarget.Fastboot -> throw AdbException(
                 "Este alvo está em modo fastboot. Use as ferramentas Fastboot."
             )
@@ -830,73 +821,6 @@ object AdbClient {
      * faria nada. O efeito útil equivalente é forçar uma conexão nova, que é o
      * que fazemos aqui.
      */
-    fun reconnect(target: DeviceTarget): ShellResult = using(target) { conn ->
-        val remoteId = try {
-            conn.openService("reconnect:")
-        } catch (e: AdbException) {
-            return@using ShellResult(
-                "O aparelho não aceitou reconectar: ${e.message}",
-                null, failed = true
-            )
-        }
-        // O serviço TCP do adbd que atende 'reconnect:' quebra a conexão de
-        // propósito — o timeout/CLSE aqui é o comportamento esperado, não erro.
-        val out = try {
-            conn.readUntilClose(remoteId).trim()
-        } catch (_: Exception) {
-            ""
-        }
-        ShellResult(out.ifBlank { "Conexão reiniciada." }, 0)
-    }
-
-    /**
-     * `adb root` — reinicia o adbd como root (só builds userdebug/eng).
-     * Devolve a mensagem real do aparelho (não inventamos sucesso).
-     */
-    fun root(target: DeviceTarget): ShellResult = using(target) { conn ->
-        val remoteId = try {
-            conn.openService("root:")
-        } catch (e: AdbException) {
-            return@using ShellResult(e.message ?: "Falha", null, failed = true)
-        }
-        val text = conn.readUntilClose(remoteId)
-        val lower = text.lowercase()
-        val ok = lower.contains("restarting adbd as root") ||
-            lower.contains("adbd is already running as root") ||
-            lower.contains("restarting in")
-        ShellResult(text.trim(), if (ok) 0 else 1, failed = !ok)
-    }
-
-    /** `adb unroot`. */
-    fun unroot(target: DeviceTarget): ShellResult = using(target) { conn ->
-        val remoteId = conn.openService("unroot:")
-        ShellResult(conn.readUntilClose(remoteId).trim(), 0)
-    }
-
-    /** `adb remount` (precisa de root; AVB/verity pode bloquear). */
-    fun remount(target: DeviceTarget): ShellResult = using(target) { conn ->
-        val remoteId = try {
-            conn.openService("remount:")
-        } catch (e: AdbException) {
-            return@using ShellResult(e.message ?: "Falha", null, failed = true)
-        }
-        val text = conn.readUntilClose(remoteId)
-        val lower = text.lowercase()
-        val ok = lower.contains("remount succeeded") || lower.contains("succeeded")
-        ShellResult(text.trim(), if (ok) 0 else 1, failed = !ok)
-    }
-
-    /** `adb tcpip <porta>` — liga o adbd em TCP. */
-    fun tcpip(target: DeviceTarget, port: Int = 5555): ShellResult = using(target) { conn ->
-        val remoteId = try {
-            conn.openService("tcpip:$port")
-        } catch (e: AdbException) {
-            return@using ShellResult(e.message ?: "Falha", null, failed = true)
-        }
-        val text = conn.readUntilClose(remoteId)
-        ShellResult(text.trim(), if (text.lowercase().contains("restarting")) 0 else 1)
-    }
-
     /** `adb usb` — volta o adbd para USB. */
     fun usbMode(target: DeviceTarget): ShellResult = using(target) { conn ->
         val remoteId = conn.openService("usb:")
@@ -906,16 +830,6 @@ object AdbClient {
     /**
      * IP do aparelho na rede Wi‑Fi (para o "adb connect").
      */
-    fun wifiIp(target: DeviceTarget): String? {
-        val res = shell(
-            target,
-            "ip -f inet addr show wlan0 2>/dev/null | grep -o 'inet [0-9.]*' | head -1",
-            timeoutMs = 20_000
-        )
-        val f = Regex("(\\d{1,3}(\\.\\d{1,3}){3})").find(res.output) ?: return null
-        return f.value
-    }
-
     // --------------------------------------------------------------- logs
 
     /**

@@ -80,15 +80,6 @@ object Commands {
         CommandPreset("Estado do SELinux", "getenforce", "Sistema"),
         CommandPreset("Verificar root", "id", "Sistema"),
 
-        // ---------------------------------------------------- Rede
-        CommandPreset("Endereços IP", "ip addr show", "Rede"),
-        CommandPreset("IP do Wi-Fi", "ip -f inet addr show wlan0", "Rede"),
-        CommandPreset("Rotas", "ip route", "Rede"),
-        CommandPreset("DNS", "getprop | grep dns", "Rede"),
-        CommandPreset("Ping (8.8.8.8)", "ping -c 3 8.8.8.8", "Rede"),
-        CommandPreset("Wi-Fi (estado)", "dumpsys wifi | head -n 40", "Rede"),
-        CommandPreset("Interfaces", "ip link", "Rede"),
-
         // ---------------------------------------------------- Arquivos
         CommandPreset("Listar /sdcard", "ls -la /sdcard", "Arquivos"),
         CommandPreset("Downloads", "ls -la /sdcard/Download", "Arquivos"),
@@ -104,7 +95,6 @@ object Commands {
         CommandPreset("Reboot sideload", "reboot sideload", "Ações", ready = false),
         CommandPreset("adb root", "root", "Ações", ready = false),
         CommandPreset("adb remount", "remount", "Ações", ready = false),
-        CommandPreset("Ligar TCP/IP 5555", "tcpip 5555", "Ações", ready = false),
         CommandPreset("Capturar tela", "screencap -p /sdcard/tela.png", "Ações"),
         CommandPreset("Gravar tela (10s)", "screenrecord --time-limit 10 /sdcard/tela.mp4", "Ações"),
         CommandPreset("Travar tela", "input keyevent 26", "Ações"),

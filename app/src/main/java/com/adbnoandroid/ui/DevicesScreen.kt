@@ -72,10 +72,8 @@ import kotlinx.coroutines.withContext
 fun DevicesScreen(state: AppState) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var newAddress by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
     var messageIsError by remember { mutableStateOf(false) }
-    var confirmRemove by remember { mutableStateOf<AdbDeviceInfo?>(null) }
 
     fun notify(text: String, error: Boolean = false) {
         message = text
@@ -184,66 +182,6 @@ fun DevicesScreen(state: AppState) {
             }
         }
 
-        // ------------------------------------------------ Wi-Fi
-        item {
-            Spacer(Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "📶 Wi‑Fi (ADB sem fio)",
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.weight(1f)
-                )
-                TextButton(onClick = { state.probeAll() }) {
-                    Text("Testar todos", fontSize = 12.sp)
-                }
-            }
-        }
-        item {
-            SectionCard(
-                title = "Adicionar aparelho por IP",
-                subtitle = "Android 11+: Depuração sem fio → use o IP:porta mostrado. " +
-                    "Aparelhos mais antigos: adb tcpip 5555 e o IP do Wi‑Fi."
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = newAddress,
-                        onValueChange = { newAddress = it },
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text("192.168.0.10:5555", fontSize = 13.sp) },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            val (ok, msg) = state.addNetworkDevice(newAddress)
-                            notify(msg, !ok)
-                            if (ok) newAddress = ""
-                        },
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Filled.Add, contentDescription = null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Adicionar")
-                    }
-                }
-            }
-        }
-        if (state.networkDevices.isEmpty()) {
-            item {
-                EmptyHint("Nenhum aparelho por Wi‑Fi na lista.")
-            }
-        }
-        items(state.networkDevices, key = { "net-" + it.address() }) { device ->
-            NetworkDeviceCard(
-                state = state,
-                device = device,
-                onProbe = { state.probe(DeviceTarget.Net(device)) },
-                onSelect = { state.select(DeviceTarget.Net(device)) },
-                onRemove = { confirmRemove = device }
-            )
-        }
-
         // ------------------------------------------------ dicas
         item {
             SectionCard(title = "Como preparar o aparelho de destino") {
@@ -263,20 +201,6 @@ fun DevicesScreen(state: AppState) {
         item { Spacer(Modifier.height(20.dp)) }
     }
 
-    confirmRemove?.let { device ->
-        ConfirmDangerDialog(
-            title = "Remover aparelho da lista?",
-            targetLabel = device.label(),
-            message = "Você poderá adicionar de novo a qualquer momento. " +
-                "Nada é alterado no aparelho.",
-            confirmText = "Remover",
-            onConfirm = {
-                state.removeNetworkDevice(device)
-                confirmRemove = null
-            },
-            onDismiss = { confirmRemove = null }
-        )
-    }
 }
 
 // ---------------------------------------------------------------- dashboard
@@ -600,112 +524,3 @@ private fun FastbootDeviceCard(
         }
     }
 }
-
-@Composable
-private fun NetworkDeviceCard(
-    state: AppState,
-    device: AdbDeviceInfo,
-    onProbe: () -> Unit,
-    onSelect: () -> Unit,
-    onRemove: () -> Unit
-) {
-    val target = DeviceTarget.Net(device)
-    val status = state.statusOf(target)
-    val snapshot = state.snapshotOf(target)
-    val selected = state.selectedTarget?.key() == target.key()
-    var editing by remember { mutableStateOf(false) }
-    var nameDraft by remember(device.name) { mutableStateOf(device.name) }
-
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = if (selected) {
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
-        } else {
-            MaterialTheme.colorScheme.surfaceContainer
-        },
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                StatusDot(status)
-                Spacer(Modifier.width(8.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        device.name.ifBlank { snapshot?.model?.ifBlank { device.address() } ?: device.address() },
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        device.address() +
-                            (snapshot?.model?.takeIf { it.isNotBlank() && device.name.isNotBlank() }
-                                ?.let { " · $it" } ?: "") +
-                            " · " + statusLabel(status),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                if (status == DeviceStatus.CHECKING) {
-                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                }
-            }
-            if (device.lastError.isNotBlank() && status != DeviceStatus.ONLINE) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    device.lastError,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = LocalAdbColors.current.error
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedButton(onClick = onProbe, shape = RoundedCornerShape(12.dp)) {
-                    Text("Testar", fontSize = 12.sp)
-                }
-                if (status == DeviceStatus.ONLINE) {
-                    Button(onClick = onSelect, shape = RoundedCornerShape(12.dp)) {
-                        Text("Usar", fontSize = 12.sp)
-                    }
-                }
-                TextButton(onClick = { editing = !editing }) {
-                    Text("Renomear", fontSize = 12.sp)
-                }
-                Spacer(Modifier.weight(1f))
-                IconButton(onClick = onRemove) {
-                    Icon(
-                        Icons.Filled.Delete,
-                        contentDescription = "Remover",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-            if (editing) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = nameDraft,
-                        onValueChange = { nameDraft = it },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        placeholder = { Text("Apelido (ex.: Moto G do João)", fontSize = 12.sp) },
-                        textStyle = MaterialTheme.typography.bodySmall
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Button(
-                        onClick = {
-                            state.renameNetworkDevice(device, nameDraft.trim())
-                            editing = false
-                        },
-                        shape = RoundedCornerShape(12.dp)
-                    ) { Text("Salvar", fontSize = 12.sp) }
-                }
-            }
-        }
-    }
-}
-

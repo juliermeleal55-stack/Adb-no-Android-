@@ -29,11 +29,9 @@ class AppState(
 
     val usbDevices: SnapshotStateList<AdbUsb.UsbDeviceInfo> = mutableStateListOf()
     val fastbootDevices: SnapshotStateList<FastbootDeviceInfo> = mutableStateListOf()
-    val networkDevices: SnapshotStateList<AdbDeviceInfo> = mutableStateListOf()
 
     val usbStatus: SnapshotStateMap<String, DeviceStatus> = mutableStateMapOf()
     val fastbootStatus: SnapshotStateMap<String, DeviceStatus> = mutableStateMapOf()
-    val netStatus: SnapshotStateMap<String, DeviceStatus> = mutableStateMapOf()
 
     val snapshots: SnapshotStateMap<String, DeviceSnapshot> = mutableStateMapOf()
 
@@ -51,18 +49,13 @@ class AppState(
 
     val operations: SnapshotStateList<OpRecord> = mutableStateListOf()
 
-    init {
-        val saved = DevicesStore.load(context)
-        networkDevices.addAll(saved)
-    }
 
     // ----------------------------------------------------------- consultas
 
-    /** Todos os alvos possíveis (USB + Wi‑Fi + fastboot). */
+    /** Todos os alvos possíveis (USB + fastboot). */
     fun allTargets(includeFastboot: Boolean = true): List<DeviceTarget> {
         val out = ArrayList<DeviceTarget>()
         usbDevices.forEach { out.add(DeviceTarget.Usb(it)) }
-        networkDevices.forEach { out.add(DeviceTarget.Net(it)) }
         if (includeFastboot) {
             fastbootDevices.forEach { out.add(DeviceTarget.Fastboot(it)) }
         }
@@ -81,7 +74,6 @@ class AppState(
 
     fun statusOf(target: DeviceTarget): DeviceStatus = when (target) {
         is DeviceTarget.Usb -> usbStatus[target.info.deviceName] ?: DeviceStatus.UNKNOWN
-        is DeviceTarget.Net -> netStatus[target.info.address()] ?: DeviceStatus.UNKNOWN
         is DeviceTarget.Fastboot -> fastbootStatus[target.info.deviceName] ?: DeviceStatus.FASTBOOT
     }
 
@@ -115,8 +107,6 @@ class AppState(
             val stillThere = when (selectedTarget) {
                 is DeviceTarget.Usb ->
                     usbDevices.any { it.deviceName == (selectedTarget as DeviceTarget.Usb).info.deviceName }
-                is DeviceTarget.Net ->
-                    networkDevices.any { it.address() == (selectedTarget as DeviceTarget.Net).info.address() }
                 is DeviceTarget.Fastboot ->
                     fastbootDevices.any { it.deviceName == (selectedTarget as DeviceTarget.Fastboot).info.deviceName }
                 null -> false
@@ -209,7 +199,6 @@ class AppState(
             if (info.hasPermission) probe(DeviceTarget.Usb(info))
             else usbStatus[info.deviceName] = DeviceStatus.UNAUTHORIZED
         }
-        networkDevices.forEach { probe(DeviceTarget.Net(it)) }
     }
 
     /** Consulta um dispositivo e atualiza status + snapshot. */
@@ -255,19 +244,6 @@ class AppState(
                 else -> DeviceStatus.ERROR
             }
             setStatus(target, status)
-            if (target is DeviceTarget.Net) {
-                val idx = networkDevices.indexOfFirst { it.address() == target.info.address() }
-                if (idx >= 0) {
-                    networkDevices[idx] = networkDevices[idx].copy(
-                        status = status,
-                        model = snapshot.model,
-                        android = snapshot.android,
-                        serial = snapshot.serial,
-                        mode = snapshot.mode,
-                        lastError = snapshot.error
-                    )
-                }
-            }
             if (selectedTarget == null && status == DeviceStatus.ONLINE) {
                 selectedTarget = target
             }
@@ -282,7 +258,6 @@ class AppState(
     private fun setStatus(target: DeviceTarget, status: DeviceStatus) {
         when (target) {
             is DeviceTarget.Usb -> usbStatus[target.info.deviceName] = status
-            is DeviceTarget.Net -> netStatus[target.info.address()] = status
             is DeviceTarget.Fastboot -> fastbootStatus[target.info.deviceName] = status
         }
     }
@@ -294,68 +269,6 @@ class AppState(
 
     // ------------------------------------------------------------- Wi‑Fi
 
-    /**
-     * Interpreta `IP:porta` (ex.: `192.168.0.10:5555`, `[::1]:5555`).
-     * Devolve `null` se o endereço não for utilizável — a UI mostra a dica
-     * de formato em vez de deixar o usuário tentar conectar num host inválido.
-     */
-    private fun parseAddress(raw: String): Pair<String, Int>? {
-        val text = raw.trim()
-        if (text.isEmpty()) return null
-        val host: String
-        val portText: String
-        if (text.startsWith("[")) {
-            // IPv6 literal: [::1]:5555
-            val close = text.indexOf(']')
-            if (close <= 1) return null
-            host = text.substring(1, close)
-            if (close + 1 >= text.length || text[close + 1] != ':') return null
-            portText = text.substring(close + 2)
-        } else {
-            val colon = text.lastIndexOf(':')
-            if (colon <= 0 || colon == text.length - 1) return null
-            host = text.substring(0, colon)
-            portText = text.substring(colon + 1)
-        }
-        if (host.isBlank()) return null
-        val port = portText.toIntOrNull() ?: return null
-        if (port !in 1..65535) return null
-        return host to port
-    }
-
-    fun addNetworkDevice(raw: String): Pair<Boolean, String> {
-        val parsed = parseAddress(raw)
-            ?: return false to "Endereço inválido. Use IP:porta (ex.: 192.168.0.10:5555)."
-        if (networkDevices.any { it.address() == "${parsed.first}:${parsed.second}" }) {
-            return true to "Este aparelho já está na lista."
-        }
-        val device = AdbDeviceInfo(parsed.first, parsed.second)
-        networkDevices.add(device)
-        saveNetworkDevices()
-        probe(DeviceTarget.Net(device))
-        return true to "Aparelho adicionado. Aceite o diálogo de depuração nele se aparecer."
-    }
-
-    fun removeNetworkDevice(device: AdbDeviceInfo) {
-        val idx = networkDevices.indexOfFirst { it.address() == device.address() }
-        if (idx >= 0) networkDevices.removeAt(idx)
-        netStatus.remove(device.address())
-        snapshots.remove("net:" + device.address())
-        saveNetworkDevices()
-        ensureValidSelection()
-    }
-
-    fun renameNetworkDevice(device: AdbDeviceInfo, name: String) {
-        val idx = networkDevices.indexOfFirst { it.address() == device.address() }
-        if (idx >= 0) {
-            networkDevices[idx] = networkDevices[idx].copy(name = name)
-            saveNetworkDevices()
-        }
-    }
-
-    private fun saveNetworkDevices() {
-        DevicesStore.save(context, networkDevices.toList())
-    }
 
     // ---------------------------------------------------------- permissões
 

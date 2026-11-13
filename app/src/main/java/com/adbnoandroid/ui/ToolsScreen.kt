@@ -54,7 +54,7 @@ import kotlinx.coroutines.withContext
  *
  * - **Instalar APK** (streaming, com flags e progresso)
  * - **Apps** (listar, desinstalar, limpar dados, forçar parada)
- * - **Sistema** (reboot/recovery/bootloader/sideload, root, remount, tcpip)
+ * - **Sistema** (reboot/recovery/bootloader/sideload, root, remount)
  * - **Sideload de ROM** (com progresso e validação)
  * - **Diagnóstico** (bugreport, dumpsys, props, partições)
  *
@@ -80,7 +80,6 @@ fun ToolsScreen(state: AppState) {
     var installFlags by remember { mutableStateOf(InstallFlags()) }
     var confirmAction by remember { mutableStateOf<DestructiveAction?>(null) }
     var packageName by remember { mutableStateOf("") }
-    var tcpipPort by remember { mutableStateOf("5555") }
     var backupPackage by remember { mutableStateOf("") }
     var sideloadFile by remember { mutableStateOf<File?>(null) }
     var sideloadProgress by remember { mutableStateOf(0f) }
@@ -461,46 +460,6 @@ fun ToolsScreen(state: AppState) {
                             val res = AdbClient.remount(target!!)
                             val ok = res.output.contains("succeeded", true)
                             ok to res.output.ifBlank { "(sem saída)" }
-                        }
-                    }, enabled = adbOk && busy == null)
-                }
-                Spacer(Modifier.height(10.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = tcpipPort,
-                        onValueChange = { tcpipPort = it.filter { ch -> ch.isDigit() }.take(5) },
-                        modifier = Modifier.width(96.dp),
-                        label = { Text("Porta", fontSize = 11.sp) },
-                        singleLine = true
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    ActionButton("adb tcpip", {
-                        val port = tcpipPort.toIntOrNull() ?: 5555
-                        runAction("adb tcpip $port") {
-                            val res = AdbClient.tcpip(target!!, port)
-                            val ok = res.output.contains("restarting", true)
-                            val ip = if (ok) AdbClient.wifiIp(target) else null
-                            ok to buildString {
-                                append(res.output.ifBlank { "(sem saída)" })
-                                if (ip != null) {
-                                    append("\n\nAgora conecte por Wi‑Fi usando:\n")
-                                    append("$ip:$port")
-                                    append("\n\n(O IP pode ser adicionado na aba Dispositivos.)")
-                                }
-                            }
-                        }
-                    }, enabled = adbOk && busy == null)
-                    Spacer(Modifier.width(8.dp))
-                    ActionButton("Ver IP Wi‑Fi", {
-                        runAction("ip do aparelho") {
-                            val ip = AdbClient.wifiIp(target!!)
-                            (ip != null) to (ip ?: "Não foi possível ler o IP (Wi‑Fi desligado?).")
-                        }
-                    }, enabled = adbOk && busy == null)
-                    ActionButton("Reconectar", {
-                        runAction("reconectar") {
-                            val res = AdbClient.reconnect(target!!)
-                            res.ok to res.output.ifBlank { "(sem saída)" }
                         }
                     }, enabled = adbOk && busy == null)
                 }

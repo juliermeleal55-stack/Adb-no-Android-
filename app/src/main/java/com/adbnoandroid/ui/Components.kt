@@ -336,7 +336,6 @@ fun TargetSelector(
                 label = {
                     val icon = when (target) {
                         is DeviceTarget.Usb -> "🔌"
-                        is DeviceTarget.Net -> "📶"
                         is DeviceTarget.Fastboot -> "⚡"
                     }
                     Text("$icon ${shortTargetLabel(target)}", fontSize = 12.sp)
@@ -352,7 +351,6 @@ fun TargetSelector(
 
 fun shortTargetLabel(target: DeviceTarget): String = when (target) {
     is DeviceTarget.Usb -> target.info.label()
-    is DeviceTarget.Net -> target.info.title()
     is DeviceTarget.Fastboot -> target.info.label()
 }
 

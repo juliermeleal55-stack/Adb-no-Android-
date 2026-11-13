@@ -1,9 +1,5 @@
 package com.adbnoandroid
 
-import java.io.DataInputStream
-import java.io.DataOutputStream
-import java.net.InetSocketAddress
-import java.net.Socket
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -160,93 +156,6 @@ interface AdbTransport {
     fun close()
 }
 
-/** Transporte TCP: conexão direta no adbd do aparelho (Wi‑Fi). */
-class TcpTransport(
-    val host: String,
-    val port: Int,
-    private val connectTimeoutMs: Int = 6000
-) : AdbTransport {
-    private var socket: Socket? = null
-    private var out: DataOutputStream? = null
-    private var input: DataInputStream? = null
-
-    init {
-        val s = Socket()
-        try {
-            s.tcpNoDelay = true
-            s.connect(InetSocketAddress(host, port), connectTimeoutMs)
-        } catch (e: Exception) {
-            try {
-                s.close()
-            } catch (_: Exception) {
-            }
-            throw AdbConnectException(
-                "Não foi possível conectar em $host:$port. Confira se o aparelho está " +
-                    "na mesma rede, com a Depuração sem fio ativa e a porta correta.",
-                e
-            )
-        }
-        s.soTimeout = 30_000
-        socket = s
-        out = DataOutputStream(s.getOutputStream())
-        input = DataInputStream(s.getInputStream())
-    }
-
-    override fun write(data: ByteArray) {
-        val o = out ?: throw AdbConnectException("Conexão encerrada.")
-        try {
-            o.write(data)
-            o.flush()
-        } catch (e: Exception) {
-            throw AdbConnectException("A conexão de rede caiu durante o envio.", e)
-        }
-    }
-
-    override fun readFull(n: Int): ByteArray {
-        val i = input ?: throw AdbConnectException("Conexão encerrada.")
-        val buf = ByteArray(n)
-        var off = 0
-        while (off < n) {
-            val r = try {
-                i.read(buf, off, n - off)
-            } catch (e: java.net.SocketTimeoutException) {
-                throw AdbTimeoutException("O aparelho não respondeu a tempo (rede).")
-            } catch (e: Exception) {
-                throw AdbConnectException("A conexão de rede caiu.", e)
-            }
-            if (r == -1) throw AdbConnectException("O aparelho encerrou a conexão.")
-            off += r
-        }
-        return buf
-    }
-
-    override fun setTimeout(ms: Int) {
-        try {
-            socket?.soTimeout = ms
-        } catch (_: Exception) {
-        }
-    }
-
-    override fun describe(): String = "tcp://$host:$port"
-
-    override fun close() {
-        try {
-            input?.close()
-        } catch (_: Exception) {
-        }
-        try {
-            out?.close()
-        } catch (_: Exception) {
-        }
-        try {
-            socket?.close()
-        } catch (_: Exception) {
-        }
-        socket = null
-        input = null
-        out = null
-    }
-}
 
 /**
  * Conexão lógica com o adbd (banner + auth + serviços) sobre qualquer
@@ -501,8 +410,6 @@ class AdbConnection(
         destination.startsWith("remount") ->
             "Remount não permitido: o aparelho precisa estar com root (adb root) e o sistema " +
                 "em modo gravável (verity/AVB pode bloquear)."
-        destination.startsWith("tcpip") ->
-            "O aparelho recusou mudar para TCP/IP (talvez seja um build de produção)."
         else ->
             "O aparelho não oferece o serviço \"$destination\" neste modo de conexão."
     }
