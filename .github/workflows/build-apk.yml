@@ -149,25 +149,40 @@ jobs:
             done
             echo '```'
             echo
-            echo "## Teste decisivo: classes essenciais empacotadas?"
-            echo "Se Compose/AndroidX nao estiverem no APK, o app abre e fecha com"
-            echo "ClassNotFoundException — o DEX teria so o codigo do app."
+            echo "## Teste decisivo: dependencias empacotadas no APK"
+            echo
+            echo "Busca por SUBSTRING no binario do DEX (grep -a). O teste anterior"
+            echo "usava strings|grep -x, que exige a linha inteira e da falso"
+            echo "negativo — o DEX nao separa descritores em linhas."
             echo '```'
             unzip -p "$APK" 'classes*.dex' > /tmp/all.dex
-            for cls in \
-              "Lcom/adbnoandroid/MainActivity;" \
-              "Lcom/adbnoandroid/AdbClient;" \
-              "Landroidx/compose/runtime/Composer;" \
-              "Landroidx/compose/ui/platform/AndroidComposeView;" \
-              "Landroidx/compose/material3/MaterialTheme;" \
-              "Landroidx/activity/ComponentActivity;" \
-              "Lkotlinx/coroutines/CoroutineScope;" \
-              "Landroidx/core/app/NotificationCompat;"; do
-              if strings /tmp/all.dex | grep -qxF "$cls"; then
-                echo "OK     $cls"
-              else
-                echo "FALTA  $cls"
-              fi
+            echo "tamanho do DEX concatenado: $(stat -c%s /tmp/all.dex) bytes"
+            echo
+            printf '%-46s %s\n' "PADRAO" "OCORRENCIAS"
+            for pat in \
+              "com/adbnoandroid/MainActivity" \
+              "com/adbnoandroid/AdbClient" \
+              "androidx/compose/runtime/Composer" \
+              "androidx/compose/ui/platform/AndroidComposeView" \
+              "androidx/compose/material3" \
+              "androidx/activity/ComponentActivity" \
+              "kotlinx/coroutines" \
+              "androidx/core/app/NotificationCompat" \
+              "androidx/lifecycle" ; do
+              n=$(grep -a -o -F "$pat" /tmp/all.dex | wc -l)
+              if [ "$n" -gt 0 ]; then mark="OK"; else mark="AUSENTE"; fi
+              printf '%-46s %-8s %s\n' "$pat" "$n" "$mark"
+            done
+            echo '```'
+            echo
+            echo "## Cabecalho de cada DEX (dexdump do build-tools)"
+            echo '```'
+            for d in $(unzip -Z1 "$APK" | grep -E '^classes[0-9]*\.dex$'); do
+              unzip -p "$APK" "$d" > /tmp/d.dex
+              printf '%s: ' "$d"
+              "$BT/dexdump" -f /tmp/d.dex 2>/dev/null \
+                | grep -E "class_defs_size|string_ids_size" | tr -s ' ' | tr '\n' ' '
+              echo
             done
             echo '```'
             echo
