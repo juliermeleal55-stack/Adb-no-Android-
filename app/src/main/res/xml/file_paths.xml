@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <!-- Downloads gerados pelo app (logs, adb pull, …) -->
+    <!-- Downloads gerados pelo app (logs, adb pull, bugreport…) -->
     <external-files-path
         name="downloads"
         path="Download/" />
-    <!-- Arquivos copiados do gerenciador (adb push, sideload) -->
+    <!-- Fallback quando o armazenamento externo não está disponível -->
+    <files-path
+        name="files_downloads"
+        path="Downloads/" />
+    <!-- Arquivos escolhidos pelo usuário (APK, ZIP de ROM, imagens .img) -->
     <cache-path
         name="cache"
         path="." />

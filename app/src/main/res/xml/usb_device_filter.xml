@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Filtro do intent USB_DEVICE_ATTACHED: abre o app quando um aparelho com
+  interface ADB (classe 0xFF, subclasse 0x42) ou fastboot (protocolo 0x03)
+  é conectado. O Android não filtra por classe/subclasse no XML, então o
+  filtro é amplo e o app verifica a interface em runtime (AdbUsb/FastbootUsb).
+-->
+<resources>
+    <!-- Fabricantes comuns: Google, Samsung, Xiaomi, Motorola, OnePlus, Sony,
+         LG, Huawei, Oppo/Realme, Vivo, Asus, Nokia, Fairphone, Nothing… -->
+    <usb-device vendor-id="6353" />   <!-- Google -->
+    <usb-device vendor-id="1256" />   <!-- Samsung -->
+    <usb-device vendor-id="2717" />   <!-- Xiaomi -->
+    <usb-device vendor-id="2996" />   <!-- Xiaomi/POCO -->
+    <usb-device vendor-id="12290" />  <!-- Motorola -->
+    <usb-device vendor-id="4817" />   <!-- OnePlus -->
+    <usb-device vendor-id="2109" />   <!-- VIA/Sony -->
+    <usb-device vendor-id="1356" />   <!-- Sony -->
+    <usb-device vendor-id="1004" />   <!-- LG -->
+    <usb-device vendor-id="4817" />   <!-- OnePlus -->
+    <usb-device vendor-id="1478" />   <!-- Huawei -->
+    <usb-device vendor-id="3392" />   <!-- Oppo/Realme -->
+    <usb-device vendor-id="3475" />   <!-- Vivo -->
+    <usb-device vendor-id="2821" />   <!-- Asus -->
+    <usb-device vendor-id="1418" />   <!-- Nokia/HMD -->
+    <usb-device vendor-id="4490" />   <!-- Fairphone -->
+    <usb-device vendor-id="4626" />   <!-- Nothing -->
+    <usb-device vendor-id="1806" />   <!-- MediaTek -->
+    <usb-device vendor-id="1659" />   <!-- Prolific (cabos/hubs) -->
+</resources>

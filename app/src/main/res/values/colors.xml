@@ -1,11 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Paleta escura estilo terminal -->
-    <color name="bg">#0D1117</color>
-    <color name="surface">#161B22</color>
-    <color name="console">#010409</color>
-    <color name="green">#3FB950</color>
-    <color name="red">#F85149</color>
-    <color name="amber">#D29922</color>
-    <color name="text">#C9D1D9</color>
+    <!-- Cor de fundo usada antes do Compose desenhar (splash do sistema) -->
+    <color name="bg">#0B0F14</color>
 </resources>

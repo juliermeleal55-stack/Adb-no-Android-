@@ -1,0 +1,124 @@
+name: Build e publicar APK
+
+# O GitHub (que tem Android SDK de fábrica) compila o APK e publica no Release.
+# Download: https://github.com/juliermeleal55-stack/Adb-no-Android-/releases
+#
+# Gatilhos: push nesta branch + botão manual na aba "Actions".
+# Se o build FALHAR, o log completo é empurrado para a branch "ci-build-log"
+# (os logs do CI não são acessíveis do ambiente de desenvolvimento).
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "arena/5f61259b-adb-no-android"
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Instalar JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Preparar Android SDK
+        run: |
+          set -e
+          SDKMGR=""
+          for p in \
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "$ANDROID_HOME/cmdline-tools/bin/sdkmanager" \
+            /usr/lib/android-sdk/cmdline-tools/latest/bin/sdkmanager \
+            /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager ; do
+            if [ -x "$p" ]; then SDKMGR="$p"; break; fi
+          done
+
+          if [ -z "$SDKMGR" ]; then
+            echo "sdkmanager nao encontrado; baixando command-line tools..."
+            export ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-/opt/android-sdk}
+            export ANDROID_HOME=$ANDROID_SDK_ROOT
+            mkdir -p "$ANDROID_HOME/cmdline-tools"
+            cd /opt
+            curl -fsSL -o cmdtools.zip \
+              https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+            unzip -q cmdtools.zip -d "$ANDROID_HOME/cmdline-tools"
+            mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest" 2>/dev/null || true
+            SDKMGR="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          fi
+
+          echo "Usando sdkmanager: $SDKMGR"
+          yes | "$SDKMGR" --licenses > /dev/null || true
+          "$SDKMGR" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+          echo "sdk.dir=${ANDROID_SDK_ROOT:-$ANDROID_HOME}" > local.properties
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-$ANDROID_HOME}" >> "$GITHUB_ENV"
+          echo "SDK pronto."
+
+      - name: Compilar APK (debug)
+        run: |
+          set -x
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee build_output.log
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          ls -la app/build/outputs/apk/debug/
+
+      - name: Publicar APK no GitHub Release
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          TAG="v2.0"
+          gh release delete "$TAG" --yes --cleanup-tag 2> /dev/null || true
+          NOTES="APK (debug) gerado automaticamente pelo GitHub Actions.
+
+          **ADB no Android 2.0** — platform-tools no celular: protocolo ADB real em Kotlin,
+          por USB/OTG e Wi-Fi. Detecta aparelhos, autentica com chave RSA (diálogo
+          \"Permitir depuração\"), terminal com saída ao vivo, push/pull com progresso,
+          logcat com filtros, bugreport, sideload, fastboot, backup e histórico.
+
+          Instale no celular (permita apps de fontes desconhecidas)."
+          gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk \
+            --title "ADB no Android $TAG" --notes "$NOTES"
+          echo "Release $TAG publicado."
+
+      - name: Guardar o APK como artefato
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      - name: (se falhar) empurrar o log para a branch ci-build-log
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          mkdir -p .ci-logs
+          cp build_output.log .ci-logs/build.log 2>/dev/null || echo "sem build_output.log" > .ci-logs/build.log
+          {
+            echo "# Log de build falho"
+            echo "run: $GITHUB_RUN_ID  ($GITHUB_RUN_ATTEMPT)"
+            echo "data: $(date -u +%FT%TZ)"
+            echo "----"
+            tail -n 300 build_output.log 2>/dev/null
+          } > .ci-logs/README.md
+          git config user.email "actions@users.noreply.github.com"
+          git config user.name "github-actions"
+          git checkout -B ci-build-log
+          git add -f .ci-logs
+          git commit -m "ci: log do build $GITHUB_RUN_ID" || true
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            HEAD:refs/heads/ci-build-log --force
+          echo "Log publicado na branch ci-build-log."
