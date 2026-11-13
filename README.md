@@ -19,7 +19,7 @@ subiu à mão. O que o build produziu, medido no próprio runner:
 
 | Item | Valor |
 |---|---|
-| Arquivo | `app-debug.apk` · **~8,9 MB** |
+| Arquivo | `app-debug.apk` · **~9,0 MB** |
 | SHA-256 | veja o laudo do build mais recente (link abaixo) |
 | Pacote | `com.adbnoandroid.debug` |
 | Versão | 2.0 (versionCode 2) |
@@ -43,41 +43,59 @@ depuração USB no **outro** aparelho e conecte o cabo OTG.
 
 ## ✨ O que o app faz
 
-Uma tela só. De cima para baixo:
+Três telas, com a barra de navegação embaixo: **CMD**, **Arquivos** e **Config**.
 
-### 🔌 O aparelho
-Mostra o que está no cabo: modelo, fabricante, versão do Android e em que modo
-está (ADB normal, recovery, sideload ou fastboot). Se houver mais de um aparelho
-plugado, aparece a lista para escolher. Se a depuração USB ainda não foi
-autorizada no outro aparelho, o botão **Permitir acesso ao aparelho** abre o
-diálogo do Android.
+### ⌨️ CMD (a principal)
 
-### ⌨️ O comando
-Campo de texto e ▶. O que você digitar roda **no aparelho**, pelo protocolo ADB,
-e a saída aparece embaixo linha por linha — **é o que o aparelho respondeu**, sem
-resumo e sem invenção. Código de saída diferente de zero aparece em vermelho.
+De cima para baixo:
 
-### ⚡ Os atalhos
-Oito botões com o que se faz todo dia:
+1. **O aparelho** — modelo, fabricante, Android e o modo (ADB, recovery,
+   sideload, fastboot). Se houver mais de um no cabo, aparece a lista para
+   escolher. Se a depuração não estiver autorizada, o botão **Permitir acesso ao
+   aparelho** abre o diálogo do Android.
+2. **O comando** — campo de texto e ▶. O que você digitar roda **no aparelho**
+   pelo protocolo ADB, e a saída aparece embaixo linha por linha — é o que o
+   aparelho respondeu, sem resumo. Código de saída diferente de zero fica
+   vermelho.
+3. **Os atalhos** — oito botões que mostram o comando que vão executar:
 
 | Atalho | O que roda |
 |---|---|
-| **Instalar APK** | abre o seletor de arquivos e instala por streaming |
+| **Instalar APK** | abre o seletor e instala por streaming |
 | **Espaço livre** | `df -h /data` |
 | **Bateria** | `dumpsys battery` |
 | **Tela** | `screencap -p` para `/sdcard` |
 | **Reiniciar** | `reboot` (pede confirmação) |
 | **Recovery** | `reboot recovery` (pede confirmação) |
-| **Root** | `root` — só funciona em build userdebug/eng |
+| **Root** | `root` — só em build userdebug/eng |
 | **Remount** | `remount` — precisa de root |
 
-Cada atalho mostra o comando que vai rodar, para você saber o que está pedindo.
+### 📁 Arquivos
+
+Gerencia os arquivos do aparelho e coleta logs, na mesma tela porque as duas
+coisas mexem com arquivos.
+
+- **Navegar** — entra e sai de pastas pelo protocolo sync. A barra de caminho é
+  **editável**: se a pasta não existir, dá para digitar outro caminho.
+- **Receber** — toque num arquivo para trazê-lo para Downloads (no Android 10+
+  também aparece em Downloads público).
+- **Enviar** — escolhe um arquivo do celular e manda para a pasta atual.
+- **Coletar logs** — logcat, kernel/dmesg, bugreport resumido, propriedades do
+  sistema e lista de pacotes. Cada coleta grava o arquivo inteiro em Downloads e
+  mostra o começo na tela.
+
+### ⚙️ Config
+
+- **Aparência** — seguir o sistema, claro ou escuro. É o mesmo estado do botão
+  ☀/☾ no topo da tela CMD: mudar num lugar muda no outro.
+- **Código-fonte** — botão que abre o repositório no navegador.
+- **Sobre** — versão, pacote, protocolo, Android mínimo.
+- **Créditos** no rodapé: `by: julier >_<`.
 
 ### 🎨 Visual
-Material You puro: no Android 12+ as cores vêm do seu papel de parede; abaixo
-disso o app usa o esquema claro/escuro padrão. O botão ☀/☾ no topo inverte o
-tema na hora. O console **não** segue o tema — saída de terminal precisa de
-fundo próprio para erro ficar legível.
+Material You puro: no Android 12+ as cores vêm do papel de parede; abaixo disso
+o app usa o esquema claro/escuro padrão. O console **não** segue o tema — saída
+de terminal precisa de fundo próprio para erro ficar legível.
 
 ---
 
@@ -184,23 +202,25 @@ Pontos que exigiram cuidado e estão documentados no código:
 
 ```
 app/src/main/java/com/adbnoandroid/
-  MainActivity.kt      activity + estado do app
-  ui/HomeScreen.kt     a tela única (aparelho, comando, atalhos)
-  ui/Components.kt     Confirmação de ação destrutiva + cores de estado
-  ui/Theme.kt          Material You (dinâmico) + paleta do console
-  ui/FilePickers.kt    nome e cópia do arquivo escolhido no seletor
-  AdbClient.kt         fachada: shell, push/pull, install, reboot, root…
-  AdbProtocol.kt       pacotes ADB, handshake, shell v2, exceções
-  AdbUsb.kt            transporte USB (interface, endpoints, permissão)
-  AdbAuth.kt           geração de chave e assinatura no formato do AOSP
-  AdbShell.kt          execução de comandos + streaming
-  AdbSync.kt           push/pull/list/stat
-  AdbSideload.kt       envio de OTA para o recovery
-  FastbootProtocol.kt  protocolo fastboot
-  FastbootUsb.kt       transporte fastboot
-  AppState.kt          estado observável (aparelhos, seleção, snapshots)
-  UsbReceiver.kt       eventos de plug/remoção/permissão
-  FileSaver.kt         salvar arquivos baixados
+  MainActivity.kt        activity, tema e barra de navegação (3 abas)
+  ui/HomeScreen.kt       tela CMD: aparelho, comando, atalhos
+  ui/FilesScreen.kt      tela Arquivos: navegar, push/pull, coletar logs
+  ui/SettingsScreen.kt   tela Config: tema, código-fonte, créditos
+  ui/Components.kt       confirmação de ação destrutiva + cores de estado
+  ui/Theme.kt            Material You (dinâmico) + paleta do console
+  ui/FilePickers.kt      nome e cópia do arquivo escolhido no seletor
+  AdbClient.kt           fachada: shell, push/pull, install, reboot, root…
+  AdbProtocol.kt         pacotes ADB, handshake, shell v2, exceções
+  AdbUsb.kt              transporte USB (interface, endpoints, permissão)
+  AdbAuth.kt             chave RSA no formato do AOSP + assinatura SHA1
+  AdbShell.kt            execução de comandos + streaming
+  AdbSync.kt             push/pull/list/stat
+  AdbSideload.kt         envio de OTA para o recovery
+  FastbootProtocol.kt    protocolo fastboot
+  FastbootUsb.kt         transporte fastboot
+  AppState.kt            estado observável (aparelhos, seleção, snapshots)
+  UsbReceiver.kt         eventos de plug/remoção/permissão
+  FileSaver.kt           salvar, compartilhar e abrir arquivos
 ```
 
 ---
@@ -216,4 +236,4 @@ app/src/main/java/com/adbnoandroid/
 - O app **não** faz root. Ele fala com um `adbd` que já esteja rodando.
 - Sem Wi‑Fi de propósito: só cabo. `adb tcpip` e conexão sem fio foram removidos
   a pedido, junto com os presets e a tela correspondente.
-- O histórico de comandos vive na memória da tela; fechar o app limpa.
+- O histórico de comandos vive na memória da tela CMD; fechar o app limpa.
