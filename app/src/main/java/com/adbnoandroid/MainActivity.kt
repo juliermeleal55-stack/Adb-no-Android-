@@ -20,6 +20,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.adbnoandroid.ui.AdbTheme
+import com.adbnoandroid.ui.HomeScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -29,50 +31,30 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         AdbClient.init(this)
         setContent {
+            // Material You: segue o tema do sistema; o botão do topo inverte.
             val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
-            var themeMode by remember { mutableStateOf(ThemeMode.SYSTEM) }
-            val dark = when (themeMode) {
-                ThemeMode.SYSTEM -> systemDark
-                ThemeMode.LIGHT -> false
-                ThemeMode.DARK -> true
-            }
+            var darkOverride by remember { mutableStateOf<Boolean?>(null) }
+            val dark = darkOverride ?: systemDark
             AdbTheme(darkTheme = dark) {
                 AdbApp(
                     darkTheme = dark,
-                    themeMode = themeMode,
-                    onThemeChange = { themeMode = it }
+                    onToggleTheme = { darkOverride = !dark }
                 )
             }
         }
     }
 }
 
-enum class ThemeMode(val label: String) {
-    SYSTEM("Sistema"),
-    LIGHT("Claro"),
-    DARK("Escuro")
-}
 
-enum class Screen(val title: String, val icon: String) {
-    DEVICES("Dispositivos", "🔌"),
-    TERMINAL("Terminal", "⌨️"),
-    FILES("Arquivos", "📁"),
-    TOOLS("Ferramentas", "🧰"),
-    LOGS("Logs", "📋"),
-    FASTBOOT("Fastboot", "⚡"),
-    HISTORY("Histórico", "🕘")
-}
 
 @Composable
 fun AdbApp(
     darkTheme: Boolean,
-    themeMode: ThemeMode,
-    onThemeChange: (ThemeMode) -> Unit
+    onToggleTheme: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val state = remember { AppState(context, scope) }
-    var screen by remember { mutableStateOf(Screen.DEVICES) }
     var serverStarted by remember { mutableStateOf(false) }
 
     // Eventos USB (plugue/remoção/permissão) → re-lista dispositivos.
@@ -118,13 +100,10 @@ fun AdbApp(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
-        AppScaffold(
+        HomeScreen(
             state = state,
-            screen = screen,
-            onScreenChange = { screen = it },
             darkTheme = darkTheme,
-            themeMode = themeMode,
-            onThemeChange = onThemeChange
+            onToggleTheme = onToggleTheme
         )
     }
 }

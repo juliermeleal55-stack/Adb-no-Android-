@@ -4,11 +4,14 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -136,11 +139,23 @@ private val AppTypography = Typography(
     labelSmall = TextStyle(fontWeight = FontWeight.Medium, fontSize = 11.sp)
 )
 
+/**
+ * Material You de verdade: no Android 12+ as cores vêm do papel de parede
+ * ([dynamicDarkColorScheme]/[dynamicLightColorScheme]); abaixo disso o app cai
+ * nos esquemas fixos. O console não segue o tema — saída de terminal precisa de
+ * contraste próprio para os erros ficarem legíveis.
+ */
 @Composable
 fun AdbTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
+    val temCoresDoPapelDeParede = android.os.Build.VERSION.SDK_INT >= 31
+    val scheme = when {
+        !temCoresDoPapelDeParede -> if (darkTheme) DarkScheme else LightScheme
+        darkTheme -> dynamicDarkColorScheme(LocalContext.current)
+        else -> dynamicLightColorScheme(LocalContext.current)
+    }
     val colors = if (darkTheme) {
         AdbColors(
             success = AdbPalette.GreenLight,
@@ -176,7 +191,7 @@ fun AdbTheme(
     }
     CompositionLocalProvider(LocalAdbColors provides colors) {
         MaterialTheme(
-            colorScheme = if (darkTheme) DarkScheme else LightScheme,
+            colorScheme = scheme,
             typography = AppTypography,
             content = content
         )
